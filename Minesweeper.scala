@@ -1,15 +1,121 @@
 import java.util.Random
 import scala.collection.mutable.ListBuffer
+import javax.swing._
+import java.awt.Graphics
+import java.awt.Graphics2D
+import java.awt.Paint
+import swing.Swing._
+import swing.{Frame,Panel,Dimension}
+import java.awt.Color
+
 object Minesweeper {
 
   
   def main(args:Array[String]) {
     
     val mineField = new Minefield(5,5,10)
+    val view = new MinefieldView(mineField)
+    
+    val frame = new Frame() {
+      visible=true
+      contents = view
+      title = "Minesweeper"
+      // reactions += {
+      //         x => System.exit(0)
+      //         // case WindowClosing(e) => System.exit(0)
+      //       }
+    }
     println(mineField)
   
   }
 }
+
+
+class MinefieldView(field:Minefield) extends Panel {
+  import Minestatus._
+  
+  val squareSize = 20
+  val numRows = field.numRows()
+  val numCols = field.numCols()
+  val mines = field.mineStatus()
+  preferredSize = new Dimension(20 * field.numCols(), 20 * field.numRows())
+
+  /**
+   * @param value The incoming value to be converted
+   * @param low1  Lower bound of the value's current range
+   * @param high1 Upper bound of the value's current range
+   * @param low2  Lower bound of the value's target range
+   * @param high2 Upper bound of the value's target range
+   */
+  def map(value:Double, low1:Double, high1:Double, low2:Double, high2:Double):Double = {
+    val diff = value - low1
+    val proportion = diff / (high1 - low1)
+    lerp(low2, high2, proportion)
+  }
+
+
+  // Linearly interpolate between two values
+  def lerp(value1:Double, value2:Double, amt:Double):Double = {
+      ((value2 - value1) * amt) + value1
+  }
+
+  
+  override def paint(g: Graphics2D): Unit = {
+    super.paint(g)
+    
+    val width = size.getWidth().asInstanceOf[Int]
+    val height = size.getHeight().asInstanceOf[Int]
+    
+    val gridWidth = width / numCols
+    val gridHeight = height / numRows
+    
+    g.clearRect(0,0,width,height)
+    
+    g.setColor(Color.RED)
+    // Draw the mines
+    for (x <- 0 until numCols) {
+      for (y <- 0 until numRows) {
+        val x1 = gridWidth * x
+        val y1 = gridHeight * y
+        if (mines(y)(x) == Minestatus.Dangerous) {
+          // Draw an x
+          g.drawLine(x1,y1,x1+gridWidth,y1+gridHeight)
+          g.drawLine(x1,y1+gridHeight,x1+gridWidth,y1)
+        }
+        // Draw the number 
+        else {
+          g.drawString(String.valueOf(field.numAdjacent(x,y)), x1+gridWidth/2, y1+gridHeight/2)
+        }
+      }
+    }
+    
+    val debug = true
+    if (debug) {
+      g.setColor(new Color(0,0,255,128))
+    }
+    else {
+      g.setColor(Color.BLUE);
+    }
+  
+    g.fillRect(0,0,width,height)
+    
+    // Draw the grid lines
+    g.setColor(Color.WHITE)
+    // g.drawRect(0,0,width,height)
+    // Draw horizontal lines
+    for (row <- 0 until numRows + 1) {
+      val y = map(row, 0, numRows, 0, height-1).asInstanceOf[Int]
+      g.drawLine(0,y,width,y)
+    }
+    // Vertical lines
+    for (col <- 0 until numCols + 1) {
+      val x = map(col, 0, numCols, 0, width-1).asInstanceOf[Int]
+      g.drawLine(x,0,x,height)
+    }
+  }
+  
+}
+
 
 object Minestatus extends Enumeration {
   val Safe = Value("Safe")
@@ -53,7 +159,7 @@ class Minefield(width:Int, height:Int, numMines:Int) {
   
   private val mines:Array[Array[Minestatus.Value]] = calculateMineLocations()
   
-
+  def mineStatus() = mines
   // private def subRectArray(array:Array[Array[E]], x:Int, y:Int, width:Int, height:Int) = {
   //   val numRows = array.length
   //   val numCols = array(0).length
@@ -64,13 +170,14 @@ class Minefield(width:Int, height:Int, numMines:Int) {
   //   
   // }
 
-
+  def numRows() = height
+  def numCols() = width
 
   private def calculateNumAdjacentMines():Array[Array[Int]] = {
     
     // Simple algorithm.  Loop through all adjacent squares for each square
     // on the board, and check how many of those are mines.
-    // To avoid special case logic at edges and corners, we extent the board
+    // To avoid special case logic at edges and corners, we extend the board
     // one square in each direction
     val scratchBoard = Array.fill(width+2,height+2)(Minestatus.Safe)
     
@@ -110,7 +217,9 @@ class Minefield(width:Int, height:Int, numMines:Int) {
   
   val adjacentCounts = calculateNumAdjacentMines()
 
-
+  def numAdjacent(x:Int, y:Int) = {
+    adjacentCounts(y)(x)
+  }
   
   override def toString():String = {
     // for all the rows
