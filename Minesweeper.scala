@@ -6,8 +6,9 @@ import java.awt.Graphics2D
 import java.awt.Paint
 import java.awt.Rectangle
 import swing.Swing._
-import swing.{Frame,Panel,Dimension}
+import swing.{Frame,Panel,Button,BoxPanel,FlowPanel,Dimension,Orientation}
 import java.awt.Color
+import java.util.{Observable,Observer}
 
 object Minesweeper {
 
@@ -16,9 +17,24 @@ object Minesweeper {
     
     println("Num mines: ")
     // val numMines = Console.readInt()
+
     
-    val mineField = new Minefield(5,5,5)
-    val view = new MinefieldView(mineField)
+    val mineField = new Minefield(10,10,10)
+    val scoreboard = new MinefieldScoreboard(mineField)
+    val minefieldView = new MinefieldView(mineField)
+    
+    val view = new BoxPanel(Orientation.Vertical) {
+      contents ++ List(scoreboard, minefieldView)
+    }
+
+    mineField.addObserver(scoreboard)
+    mineField.addObserver(minefieldView)
+    
+    
+    // val view = new MinefieldView(mineField)
+    // val view = new MinefieldPanel(mineField)
+    
+    // val view = new MinefieldScoreboard(mineField)
     
     val frame = new Frame() {
       visible=true
@@ -30,29 +46,35 @@ object Minesweeper {
       //       }
     }
     println(mineField)
-  
-    // while (true) {
-    //       val args = Console.readLine().split(",")
-    //       val x = args(0).trim().toInt
-    //       val y = args(1).trim().toInt
-    //       
-    //       
-    //       println("Expanded values for (" + x + ", " + y + ")")
-    //       val coords = mineField.expandEmptySpace(x,y)
-    //       println("Size " + coords.size)
-    //       println(coords.mkString("\n"))
-    //     }
-  
   }
 }
 
+// class MinefieldPanel(field:Minefield) extends FlowPanel {
+//   override def contents() = List(new MinefieldScoreboard(field), new MinefieldView(field))
+//   preferredSize = new Dimension(600, 600)
+// }
 
-
-class MinefieldScoreboard(field:Minefield) extends Panel {
+class MinefieldScoreboard(field:Minefield) extends FlowPanel with Observer {
+  import scala.swing._
+  val timer:Label = new Label("400")
+  val reset:Button = new Button() {
+    action = new Action("Reset") {
+      override def apply():Unit = {
+        field.reset()
+      }
+    }
+  }
+  val numMines:Label = new Label(field.numFlags.toString)
+  contents ++ List(timer, reset, numMines)
+  // override def contents() = List(timer, reset, numMines)
+  
+  override def update(o:Observable, arg:Any):Unit = {
+    numMines.text = field.numFlags().toString
+  }
   
 }
 
-class MinefieldView(field:Minefield) extends Panel {
+class MinefieldView(field:Minefield) extends Panel with Observer {
   import Minestatus._
   import ExplorationStatus._
   import scala.swing.event.{MouseDragged,MousePressed}
@@ -62,9 +84,13 @@ class MinefieldView(field:Minefield) extends Panel {
   val numRows = field.numRows()
   val numCols = field.numCols()
   val mines = field.mineStatus()
-  preferredSize = new Dimension(20 * field.numCols(), 20 * field.numRows())
+  preferredSize = new Dimension(squareSize * field.numCols(), squareSize * field.numRows())
 
   listenTo(mouse.clicks, mouse.moves)
+  
+  override def update(o:Observable, arg:Any):Unit = {
+    repaint()
+  }
   
   def pointToColumnRow(point:Point):Tuple2[Int,Int] = {
     val width = size.width
@@ -94,7 +120,6 @@ class MinefieldView(field:Minefield) extends Panel {
     else {
       field.expand(colRow._1, colRow._2);
     }
-    repaint()
   }
 
   /**
@@ -178,7 +203,7 @@ class MinefieldView(field:Minefield) extends Panel {
     def drawQuestion(x:Int, y:Int):Unit = {
       drawUnexplored(x,y)
       val bounds = rect(x,y)
-      g.setColor(Color.BLACK)
+      g.setColor(Color.WHITE)
       g.drawString("?", bounds.x + bounds.width/2, bounds.y + bounds.height/2)
     }
     // g.setColor(Color.RED)
@@ -248,7 +273,7 @@ object ExplorationStatus extends Enumeration {
 }
 
 
-class Minefield(width:Int, height:Int, numMines:Int) {
+class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
   import Minestatus._
   import ExplorationStatus._
   private val random = new Random()
@@ -257,9 +282,10 @@ class Minefield(width:Int, height:Int, numMines:Int) {
   
   // Can either move forward, stay put, or move back
   private val moves = List(1,0,-1)
-  private val adjacent8Directions = (for (x<-moves; y<-moves) yield(x,y)).filter(x=>x._1 != 0 || x._2 != 0)
+  private val adjacent8Directions = (for (x<-moves; y<-moves) yield(x,y)).filter(x=>x!=(0,0))
   private val adjacent4Directions = List((1,0), (0,1), (-1,0), (0,-1))
     
+  private var numFlagsRemaining:Int = numMines
   
   // Calculates random (x,y) pairs in the given range
   private def pickRandomCoordinates(numCoords:Int, minX:Int, minY:Int, maxX:Int, maxY:Int):List[Coord] = {
@@ -294,9 +320,9 @@ class Minefield(width:Int, height:Int, numMines:Int) {
   
   private def initField() = { Array.fill(height,width)(ExplorationStatus.Unexplored)}
   
-  private val mines:Array[Array[Minestatus.Value]] = calculateMineLocations()
+  private var mines:Array[Array[Minestatus.Value]] = calculateMineLocations()
   
-  private val field:Array[Array[ExplorationStatus.Value]] = initField()
+  private var field:Array[Array[ExplorationStatus.Value]] = initField()
   
   def explorationStatus(x:Int, y:Int) = field(y)(x)
   
@@ -309,12 +335,19 @@ class Minefield(width:Int, height:Int, numMines:Int) {
   private var dead = false
   def isDead() = dead
   
+  def changed() = {
+    setChanged()
+    notifyObservers()
+  }
 
-  // def reset() {
-  //   mines = calculateMineLocations()
-  //   field = initField()
-  //   adjacentCounts = calculateNumAdjacentMines()
-  // }
+  def reset() {
+    dead = false
+    numFlagsRemaining = numMines
+    mines = calculateMineLocations()
+    field = initField()
+    adjacentCounts = calculateNumAdjacentMines()
+    changed()
+  }
 
   private def calculateNumAdjacentMines():Array[Array[Int]] = {
     
@@ -353,7 +386,7 @@ class Minefield(width:Int, height:Int, numMines:Int) {
     answers
   }
   
-  val adjacentCounts = calculateNumAdjacentMines()
+  var adjacentCounts = calculateNumAdjacentMines()
 
   private def expandEmptySpace(x:Int, y:Int):List[Coord] = {
     // If it's not on a zero to start with, there are no additional
@@ -367,21 +400,11 @@ class Minefield(width:Int, height:Int, numMines:Int) {
       buff.append((x,y))
       previouslyVisited.append((x,y))
       
-      
       for (dir <- adjacent8Directions) {
         val x1 = x + dir._1
         val y1 = y + dir._2
         expandEmptySpace(buff, previouslyVisited, x1, y1)
       }
-      
-      // // Expand north
-      // expandEmptySpace(buff, previouslyVisited, x,y-1)
-      // // Expand east
-      // expandEmptySpace(buff, previouslyVisited, x+1,y)
-      // // expand south
-      // expandEmptySpace(buff, previouslyVisited, x,y+1)
-      // // expand west
-      // expandEmptySpace(buff, previouslyVisited, x-1,y)
       return buff.toList
     }
   }
@@ -408,19 +431,7 @@ class Minefield(width:Int, height:Int, numMines:Int) {
     if (numAdjacent(x,y) != 0) {
       return Unit
     }
-
-    
-    // println("Expanding empty space at " + coord)
-    //    println("toExpand: " + toExpand)
-    //    println("previously visited: " + previouslyVisited)
-    
-    
-    // val north = (0,-1)
-    // val east = (1,0)
-    // val south = (0,1)
-    // val west = (-1,0)
-    // val dirs = List(north,east,south,west)
-    
+  
     for (dir <- adjacent8Directions) {
       val x1 = x + dir._1
       val y1 = y + dir._2
@@ -436,16 +447,22 @@ class Minefield(width:Int, height:Int, numMines:Int) {
     mines(y)(x) == Minestatus.Dangerous
   }
   
+  def numFlags() = {
+    // If it's negative, return 0
+    numFlagsRemaining.max(0)
+  }
+  
   def toggleFlag(x:Int, y:Int):Unit = {
     val curExploration = explorationStatus(x,y)
     // Three states for flagging - unexplored, flagged, question.  Cycles through
     // these
     field(y)(x) = curExploration match {
-      case ExplorationStatus.Unexplored => ExplorationStatus.Flagged
-      case ExplorationStatus.Flagged => ExplorationStatus.Question
+      case ExplorationStatus.Unexplored => { numFlagsRemaining -= 1; ExplorationStatus.Flagged }
+      case ExplorationStatus.Flagged => { numFlagsRemaining += 1; ExplorationStatus.Question }
       case ExplorationStatus.Question => ExplorationStatus.Unexplored
       case _ => field(y)(x)
     }
+    changed()
   }
   
   def kill(): Unit = {
@@ -462,7 +479,8 @@ class Minefield(width:Int, height:Int, numMines:Int) {
   def expand(x:Int, y:Int):Unit = {
     // If they clicked on a mine, it's game over
     if (isMine(x,y)) {
-      return kill()
+      kill()
+      changed()
     }
     
     def expandZeroSquare(): Unit = {
@@ -487,6 +505,7 @@ class Minefield(width:Int, height:Int, numMines:Int) {
       expandZeroSquare()
     }
     
+    changed()
   }
   
   
