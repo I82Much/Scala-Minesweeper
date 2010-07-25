@@ -13,22 +13,40 @@ object Minesweeper {
   
   def main(args:Array[String]) {
     
-    val mineField = new Minefield(5,5,10)
+    println("Num mines: ")
+    val numMines = Console.readInt()
+    
+    val mineField = new Minefield(5,5,numMines)
     val view = new MinefieldView(mineField)
     
-    val frame = new Frame() {
-      visible=true
-      contents = view
-      title = "Minesweeper"
-      // reactions += {
-      //         x => System.exit(0)
-      //         // case WindowClosing(e) => System.exit(0)
-      //       }
-    }
+    // val frame = new Frame() {
+    //       visible=true
+    //       contents = view
+    //       title = "Minesweeper"
+    //       // reactions += {
+    //       //         x => System.exit(0)
+    //       //         // case WindowClosing(e) => System.exit(0)
+    //       //       }
+    //     }
     println(mineField)
+  
+    while (true) {
+      val args = Console.readLine().split(",")
+      val x = args(0).trim().toInt
+      val y = args(1).trim().toInt
+      
+      
+      println("Expanded values for (" + x + ", " + y + ")")
+      val coords = mineField.expandEmptySpace(x,y)
+      println("Size " + coords.size)
+      println(coords.mkString("\n"))
+    }
   
   }
 }
+
+
+
 
 
 class MinefieldView(field:Minefield) extends Panel {
@@ -124,11 +142,14 @@ object Minestatus extends Enumeration {
 
 class Minefield(width:Int, height:Int, numMines:Int) {
   import Minestatus._
-  val random = new Random()
+  private val random = new Random()
+  
+  type Coord = Tuple2[Int,Int]
+
   
   // Calculates random (x,y) pairs in the given range
-  private def pickRandomCoordinates(numCoords:Int, minX:Int, minY:Int, maxX:Int, maxY:Int):List[Tuple2[Int,Int]] = {
-    var coords:ListBuffer[Tuple2[Int,Int]] = new ListBuffer()
+  private def pickRandomCoordinates(numCoords:Int, minX:Int, minY:Int, maxX:Int, maxY:Int):List[Coord] = {
+    var coords:ListBuffer[Coord] = new ListBuffer()
     for (i <- 0 until numCoords) {
       def randomBetween(lowerBound:Int, upperBound:Int):Int = {
         val diff = upperBound - lowerBound
@@ -215,7 +236,74 @@ class Minefield(width:Int, height:Int, numMines:Int) {
     answers
   }
   
+  
+  
+  
+  
+  
   val adjacentCounts = calculateNumAdjacentMines()
+
+  def expandEmptySpace(x:Int, y:Int):List[Coord] = {
+    // If it's not on a zero to start with, there are no additional
+    // spaces that need to be uncovered
+    if (numAdjacent(x,y) != 0) {
+      return List[Coord]()
+    }
+    else {
+      val buff = new ListBuffer[Coord]()
+      val previouslyVisited = new ListBuffer[Coord]()
+      buff.append((x,y))
+      previouslyVisited.append((x,y))
+      // Expand north
+      expandEmptySpace(buff, previouslyVisited, x,y-1)
+      // Expand east
+      expandEmptySpace(buff, previouslyVisited, x+1,y)
+      // expand south
+      expandEmptySpace(buff, previouslyVisited, x,y+1)
+      // expand west
+      expandEmptySpace(buff, previouslyVisited, x-1,y)
+      return buff.toList
+    }
+  }
+  
+  private def outOfBounds(x:Int, y:Int) = {
+    x < 0 || x >= numCols ||
+    y < 0 || y >= numRows
+  }
+  
+  private def expandEmptySpace(toExpand:ListBuffer[Coord], 
+    previouslyVisited:ListBuffer[Coord], x:Int, y:Int):Unit = {
+      
+    // Stop the recursion
+    if (outOfBounds(x,y) || previouslyVisited.contains(x,y) || numAdjacent(x,y) != 0) { return Unit }
+      
+      
+    val coord = (x,y)
+    previouslyVisited.append(coord)
+    toExpand.append(coord)
+
+    
+    // println("Expanding empty space at " + coord)
+    //    println("toExpand: " + toExpand)
+    //    println("previously visited: " + previouslyVisited)
+    
+    
+    val north = (0,-1)
+    val east = (1,0)
+    val south = (0,1)
+    val west = (-1,0)
+    val dirs = List(north,east,south,west)
+    
+    for (dir <- dirs) {
+      val x1 = x + dir._1
+      val y1 = y + dir._2
+      if (!previouslyVisited.contains((x1,y1))) {
+        expandEmptySpace(toExpand, previouslyVisited, x1, y1)
+        
+      }
+    }
+  }
+  
 
   def numAdjacent(x:Int, y:Int) = {
     adjacentCounts(y)(x)
