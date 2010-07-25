@@ -48,7 +48,9 @@ object Minesweeper {
 
 
 
-
+class MinefieldScoreboard(field:Minefield) extends Panel {
+  
+}
 
 class MinefieldView(field:Minefield) extends Panel {
   import Minestatus._
@@ -94,8 +96,6 @@ class MinefieldView(field:Minefield) extends Panel {
     }
     repaint()
   }
-
-  
 
   /**
    * @param value The incoming value to be converted
@@ -144,14 +144,29 @@ class MinefieldView(field:Minefield) extends Panel {
       g.fillRect(bounds.x, bounds.y, bounds.width, bounds.height)
     }
     
+    def drawMine(x:Int, y:Int):Unit = {
+      g.setColor(Color.RED)
+      val bounds = rect(x,y)
+      val (x1, y1) = (bounds.x, bounds.y)
+      val (width, height) = (bounds.width, bounds.height)
+      g.drawLine(x1,y1,x1+width,y1+height)
+      g.drawLine(x1,y1+height,x1+width,y1)
+    }
+    
     def drawExplored(x:Int, y:Int):Unit = {
       g.setColor(exploredColor)
       val bounds = rect(x,y)
       g.fillRect(bounds.x, bounds.y, bounds.width, bounds.height)
-      val numAdjacent = field.numAdjacent(x,y)
-      if (numAdjacent != 0) {
-        g.setColor(numColMap.getOrElse(numAdjacent, Color.RED))
-        g.drawString(numAdjacent.toString, bounds.x + bounds.width/2, bounds.y + bounds.height/2)
+      
+      if (field.isMine(x,y)) {
+        drawMine(x,y)
+      }
+      else {
+        val numAdjacent = field.numAdjacent(x,y)
+        if (numAdjacent != 0) {
+          g.setColor(numColMap.getOrElse(numAdjacent, Color.RED))
+          g.drawString(numAdjacent.toString, bounds.x + bounds.width/2, bounds.y + bounds.height/2)
+        }
       }
     }
     def drawFlag(x:Int, y:Int):Unit = {
@@ -229,12 +244,7 @@ object Minestatus extends Enumeration {
 
 object ExplorationStatus extends Enumeration {
   type ExplorationStatus = Value
-  val Unexplored = Value("Unexplored")
-  val Explored = Value("Explored")
-  val Flagged = Value("Flagged")
-  val Question = Value("Question")
-  // Cycle between UnexploredWithNumber, Flagged, Question when right clicking
-  // on appropriate square
+  val Unexplored, Explored, Flagged, Question = Value
 }
 
 
@@ -248,7 +258,6 @@ class Minefield(width:Int, height:Int, numMines:Int) {
   // Can either move forward, stay put, or move back
   private val moves = List(1,0,-1)
   private val adjacent8Directions = (for (x<-moves; y<-moves) yield(x,y)).filter(x=>x._1 != 0 || x._2 != 0)
-
   private val adjacent4Directions = List((1,0), (0,1), (-1,0), (0,-1))
     
   
@@ -283,9 +292,11 @@ class Minefield(width:Int, height:Int, numMines:Int) {
     mines
   }
   
+  private def initField() = { Array.fill(height,width)(ExplorationStatus.Unexplored)}
+  
   private val mines:Array[Array[Minestatus.Value]] = calculateMineLocations()
   
-  private val field:Array[Array[ExplorationStatus.Value]] = Array.fill(height,width)(ExplorationStatus.Unexplored)
+  private val field:Array[Array[ExplorationStatus.Value]] = initField()
   
   def explorationStatus(x:Int, y:Int) = field(y)(x)
   
@@ -293,6 +304,17 @@ class Minefield(width:Int, height:Int, numMines:Int) {
  
   def numRows() = height
   def numCols() = width
+  
+  
+  private var dead = false
+  def isDead() = dead
+  
+
+  // def reset() {
+  //   mines = calculateMineLocations()
+  //   field = initField()
+  //   adjacentCounts = calculateNumAdjacentMines()
+  // }
 
   private def calculateNumAdjacentMines():Array[Array[Int]] = {
     
@@ -410,7 +432,7 @@ class Minefield(width:Int, height:Int, numMines:Int) {
   }
   
   
-  private def isMine(x:Int, y:Int):Boolean = {
+  def isMine(x:Int, y:Int):Boolean = {
     mines(y)(x) == Minestatus.Dangerous
   }
   
@@ -426,14 +448,22 @@ class Minefield(width:Int, height:Int, numMines:Int) {
     }
   }
   
+  def kill(): Unit = {
+    dead = true
+    // expand everything
+    for (row <- 0 until numRows) {
+      for (col <- 0 until numCols) {
+        field(row)(col) = ExplorationStatus.Explored
+      }
+    }
+  }
+  
   // 
   def expand(x:Int, y:Int):Unit = {
     // If they clicked on a mine, it's game over
     if (isMine(x,y)) {
-      println("you're dead")
-      return Unit
+      return kill()
     }
-    
     
     def expandZeroSquare(): Unit = {
       field(y)(x) = ExplorationStatus.Explored
@@ -448,30 +478,8 @@ class Minefield(width:Int, height:Int, numMines:Int) {
     }
     def expandNonZeroSquare(): Unit = {
       field(y)(x) = ExplorationStatus.Explored
-
-      // Only expand adjacent squares IF one of the adjacent squares next to it
-      // is already explored
-      // val adjacent = adjacent8Directions.map(d => (d._1 + x, d._2 + y))
-      //       if (adjacent.exists(d => !outOfBounds(d) && explorationStatus(d._1, d._2) == ExplorationStatus.Explored)) {
-      //         // Check 8 areas around them to see if they need reveal
-      //         revealAdjacentHiddenNumbers(x,y)
-      //       }
-      
     }
-    
-    
-    
-    // def revealAdjacentHiddenNumbers(x:Int, y:Int) {
-    //       for (offset <- adjacent8Directions) {
-    //         val x2 = x + offset._1
-    //         val y2 = y + offset._2
-    //         
-    //         if (!outOfBounds(x2, y2) && explorationStatus(x2,y2) == ExplorationStatus.UnexploredHidden) {
-    //           field(y2)(x2) = ExplorationStatus.UnexploredWithNumber
-    //         }
-    //       }
-    //     }
-    
+      
     if (numAdjacent(x,y) > 0) {
       expandNonZeroSquare()
     }
