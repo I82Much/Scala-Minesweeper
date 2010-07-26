@@ -13,12 +13,7 @@ import swing.event.{WindowClosing}
 
 object Minesweeper {
 
-  
   def main(args:Array[String]) {
-    
-    println("Num mines: ")
-    // val numMines = Console.readInt()
-
     
     val mineField = new Minefield(10,10,10)
     val scoreboard = new MinefieldScoreboard(mineField)
@@ -46,13 +41,16 @@ object Minesweeper {
 
 class MinefieldScoreboard(field:Minefield) extends FlowPanel with Observer {
   import scala.swing._
+  import javax.swing.ImageIcon
+  
   val timer:Label = new Label("400")
   val reset:Button = new Button() {
-    action = new Action("Reset") {
+    action = new Action("") {
       override def apply():Unit = {
         field.reset()
       }
     }
+    icon = new ImageIcon(MinefieldView.happy)
   }
   val numMines:Label = new Label(field.numFlags.toString)
   contents ++ List(timer, reset, numMines)
@@ -60,9 +58,19 @@ class MinefieldScoreboard(field:Minefield) extends FlowPanel with Observer {
   
   override def update(o:Observable, arg:Any):Unit = {
     numMines.text = field.numFlags().toString
+    
+    reset.icon = 
+      if (field.isDead) {
+        new ImageIcon(MinefieldView.sad)
+      }
+      else if (field.hasWon) {
+        new ImageIcon(MinefieldView.cool)
+      }
+      else {
+        new ImageIcon(MinefieldView.happy)
+      }
   }
 }
-
 object TextPlacer {
   import java.awt.font.{TextLayout}
   import java.awt.{Font}
@@ -133,9 +141,11 @@ object MinefieldView {
   import java.awt.image.BufferedImage
   import javax.imageio.ImageIO
   import java.io.File
-  protected val flag:BufferedImage = ImageIO.read(new File("red_flag_32.png"))
-  protected val bomb:BufferedImage = ImageIO.read(new File("bomb_128.png"))
-  
+  val flag:BufferedImage = ImageIO.read(new File("red_flag_32.png"))
+  val bomb:BufferedImage = ImageIO.read(new File("bomb_128.png"))
+  val happy:BufferedImage = ImageIO.read(new File("happy.png"))
+  val cool:BufferedImage = ImageIO.read(new File("cool.png"))
+  val sad:BufferedImage = ImageIO.read(new File("sad.png"))
 }
 
 class MinefieldView(field:Minefield) extends Panel with Observer {
@@ -223,7 +233,7 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
     val gridWidth = width / numCols
     val gridHeight = height / numRows
     
-    val numberColorMap = Map(1->Color.BLUE, 2->Color.GREEN, 3->Color.RED, 4->Color.BLACK)
+    val numberColorMap = Map(1->Color.BLUE, 2->Color.GREEN.darker(), 3->Color.RED, 4->Color.BLACK)
     
     // the y locs of row i are at i and i + 1.  Similarly for column
     val rowGridLines:List[Int] = (0 until numRows + 1).toList.map(map(_, 0, numRows, 0, height-1).asInstanceOf[Int])
@@ -375,18 +385,25 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
     coords.toList
   }
 
-  private def calculateMineLocations():Array[Array[Minestatus.Value]] = {
-    val mineCoords = pickRandomCoordinates(numMines, 0, 0, width, height)
+  private def calculateMineLocations():List[Coord] = {
+    pickRandomCoordinates(numMines, 0, 0, width, height)
+  }
+  
+  private var mineLocs = calculateMineLocations()
+  
+  private def fromLocations(coords:List[Coord]):Array[Array[Minestatus.Value]] = {
     // 2d array of Minestatus
     val mines = Array.fill(height,width)(Minestatus.Safe)
     // we have x,y, change to row, column
-    mineCoords.foreach(x => mines(x._2)(x._1) = Minestatus.Dangerous)
+    coords.foreach(x => mines(x._2)(x._1) = Minestatus.Dangerous)
     mines
   }
   
   private def initField() = { Array.fill(height,width)(ExplorationStatus.Unexplored)}
   
-  private var mines:Array[Array[Minestatus.Value]] = calculateMineLocations()
+  private var mines:Array[Array[Minestatus.Value]] = fromLocations(mineLocs)
+  
+  
   
   private var field:Array[Array[ExplorationStatus.Value]] = initField()
   
@@ -409,7 +426,8 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
   def reset() {
     dead = false
     numFlagsRemaining = numMines
-    mines = calculateMineLocations()
+    mineLocs = calculateMineLocations()
+    mines = fromLocations(mineLocs)
     field = initField()
     adjacentCounts = calculateNumAdjacentMines()
     changed()
@@ -601,6 +619,13 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
     sb.toString()
   }
   
+  private var won = false
+  // TODO: calculate when they've won
+  
+  def hasWon():Boolean = {
+    // See if all of the 
+    mineLocs.forall(loc => explorationStatus(loc._1, loc._2) == ExplorationStatus.Flagged)
+  }
   
 }
 
