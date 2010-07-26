@@ -129,6 +129,14 @@ object TextPlacer {
 }
 
 
+object MinefieldView {
+  import java.awt.image.BufferedImage
+  import javax.imageio.ImageIO
+  import java.io.File
+  protected val flag:BufferedImage = ImageIO.read(new File("red_flag_32.png"))
+  protected val bomb:BufferedImage = ImageIO.read(new File("bomb_128.png"))
+  
+}
 
 class MinefieldView(field:Minefield) extends Panel with Observer {
   import Minestatus._
@@ -136,8 +144,10 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
   import scala.swing.event.{MouseDragged,MousePressed,MouseReleased}
   import java.awt.Point
   import TextPlacer._
+  import java.awt.geom.AffineTransform
+  import java.awt.image.BufferedImage
   
-  val squareSize = 20
+  val squareSize = MinefieldView.flag.getWidth()
   val numRows = field.numRows()
   val numCols = field.numCols()
   val mines = field.mineStatus()
@@ -233,13 +243,23 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
       g.fillRect(bounds.x, bounds.y, bounds.width, bounds.height)
     }
     
+    def drawIcon(bounds:Rectangle, icon:BufferedImage):Unit = {
+      val xScale = bounds.width / icon.getWidth().asInstanceOf[Float]
+      val yScale = bounds.height / icon.getHeight().asInstanceOf[Float] 
+      // Scale, then translate
+      val scale = AffineTransform.getScaleInstance(xScale, yScale)
+      val translate = AffineTransform.getTranslateInstance(bounds.x, bounds.y)
+      
+      translate.concatenate(scale)
+      
+      g.drawImage(icon, translate, null)
+      
+    }
+    
     def drawMine(x:Int, y:Int):Unit = {
       g.setColor(Color.RED)
       val bounds = rect(x,y)
-      val (x1, y1) = (bounds.x, bounds.y)
-      val (width, height) = (bounds.width, bounds.height)
-      g.drawLine(x1,y1,x1+width,y1+height)
-      g.drawLine(x1,y1+height,x1+width,y1)
+      drawIcon(bounds, MinefieldView.bomb)
     }
     
     def drawExplored(x:Int, y:Int):Unit = {
@@ -265,8 +285,9 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
       val bounds = rect(x,y)
       val cx = bounds.x + bounds.width/2
       val cy = bounds.y + bounds.height/2
-      g.setColor(Color.RED)
-      TextPlacer.drawText("F", AnchorPoint.Center, g, cx, cy)
+      val icon = MinefieldView.flag
+      
+      drawIcon(bounds, icon)
     }
     def drawQuestion(x:Int, y:Int):Unit = {
       drawUnexplored(x,y)
@@ -329,7 +350,6 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
   // Can either move forward, stay put, or move back
   private val moves = List(1,0,-1)
   private val adjacent8Directions = (for (x<-moves; y<-moves) yield(x,y)).filter(x=>x!=(0,0))
-  private val adjacent4Directions = List((1,0), (0,1), (-1,0), (0,-1))
     
   private var numFlagsRemaining:Int = numMines
   
@@ -521,8 +541,15 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
     }
   }
   
-  // 
+  // TODO: Refactor this
   def expand(x:Int, y:Int):Unit = {
+    // If they click on a ? or Flag, ignore it
+    val ignored = List(ExplorationStatus.Flagged, ExplorationStatus.Question)
+    if (ignored.contains(explorationStatus(x,y))) {
+      return Unit
+    }
+    
+    
     // If they clicked on a mine, it's game over
     if (isMine(x,y)) {
       kill()
