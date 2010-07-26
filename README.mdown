@@ -1,0 +1,6 @@
+2010-07-25
+---
+
+This is my attempt to clone MineSweeper, the classic Windows game, in Scala/Java.
+
+Please see icons.txt for a list of all the URLs from which I retrieved the icons; all of the icons are available through iconfinder.net with licenses suitable for use in this project.
