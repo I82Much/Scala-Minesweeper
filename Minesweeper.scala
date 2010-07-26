@@ -214,17 +214,22 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
   }
   
   def mouseReleased(point:Point, modifiers:Int, clicks:Int, triggersPopup:Boolean):Unit = {
-    middleDown = false
-    leftDown = false
-
-
     val colRow = pointToColumnRow(point)
-
-    // Only 
-    if (colRow == pointToColumnRow(leftPoint)) {
+    
+    if (leftDown && sameSquare(leftPoint, (point.x, point.y))) {
       field.expand(colRow._1, colRow._2)
     }
     
+    // If the middle is down, attempt to expand all of them if it's unambiguous
+    if (middleDown) {
+      for (coord <- field.adjacentCoordinates(colRow._1, colRow._2)) {
+       field.expand(coord._1, coord._2)
+      }
+    }
+    
+    
+    middleDown = false
+    leftDown = false
 
     repaint()
   }
@@ -317,15 +322,17 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
       new Rectangle(x1,y1,width,height)
     }
     
+    // Don't color these differently
+    // val ignored = List(ExplorationStatus.Flagged, ExplorationStatus.Question)
     
     val toColorDifferently:List[Tuple2[Int,Int]] = 
       if (middleDown) {
         val center = pointToColumnRow(middlePoint._1, middlePoint._2)
-        center :: field.adjacentCoordinates(center._1, center._2)
+        (center :: field.adjacentCoordinates(center._1, center._2))//.filter(!ignored.contains(_))
       }
       // Show the currently pressed square as a diff color, as long as the mouse
       // resides within it
-      else if (leftDown && sameSquare(leftPoint, curPoint)) {
+      else if (leftDown && sameSquare(leftPoint, curPoint) && !ignored.contains(curPoint)) {
         List(pointToColumnRow(leftPoint._1, leftPoint._2))
       }
       else {
