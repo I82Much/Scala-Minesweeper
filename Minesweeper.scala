@@ -175,6 +175,11 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
   var middleDown = false
   var middlePoint:Tuple2[Int,Int] = (0,0)
   
+  var leftDown = false
+  var leftPoint:Tuple2[Int,Int] = (0,0)
+  
+  var curPoint:Tuple2[Int,Int] = (0,0)
+  
   listenTo(mouse.clicks, mouse.moves)
   
   override def update(o:Observable, arg:Any):Unit = {
@@ -189,20 +194,40 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
 
     val col = (point.x / gridWidth).asInstanceOf[Int]
     val row = (point.y / gridHeight).asInstanceOf[Int]
-    println ("Clicking on row " + row + " col " + col)
+    println ("row " + row + " col " + col)
     (col,row)
   }
   
   
   // TODO: Listen for right clicks to cycle through
   reactions += {
-    case MouseDragged(src, point, mods) => if (middleDown) { middlePoint = (point.x, point.y); repaint() }
-    case MouseReleased(src, point, i1, i2, b) => middleDown = false; repaint()
+    case MouseDragged(src, point, mods) => {
+      if (middleDown) { 
+        middlePoint = (point.x, point.y)
+      }
+      curPoint = (point.x, point.y)
+      repaint() 
+    }
+    case MouseReleased(src, point, i1, i2, b) => mouseReleased(point, i1, i2, b)
     case MousePressed(src, point, i1, i2, b) => handleMousePress(point, i1, i2, b)
     // case e => println("=> "+e.toString)
   }
   
-  
+  def mouseReleased(point:Point, modifiers:Int, clicks:Int, triggersPopup:Boolean):Unit = {
+    middleDown = false
+    leftDown = false
+
+
+    val colRow = pointToColumnRow(point)
+
+    // Only 
+    if (colRow == pointToColumnRow(leftPoint)) {
+      field.expand(colRow._1, colRow._2)
+    }
+    
+
+    repaint()
+  }
   
   def handleMousePress(point:Point, modifiers:Int, clicks:Int, triggersPopup:Boolean):Unit = {
     val colRow = pointToColumnRow(point)
@@ -212,6 +237,10 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
     val offMask = InputEvent.BUTTON1_DOWN_MASK | InputEvent.BUTTON3_DOWN_MASK
     if ( (modifiers & InputEvent.BUTTON1_DOWN_MASK) != 0) {
       println("Left down")
+      leftDown = true
+      leftPoint = (point.x,point.y)
+      curPoint = leftPoint
+      repaint()
     }
     if ((modifiers & InputEvent.BUTTON2_DOWN_MASK) != 0) {
       println("2 down")
@@ -232,9 +261,7 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
     if (triggersPopup) {
       field.toggleFlag(colRow._1, colRow._2)
     }
-    else {
-      field.expand(colRow._1, colRow._2);
-    }
+    
   }
 
   /**
@@ -256,6 +283,16 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
       ((value2 - value1) * amt) + value1
   }
 
+  /**
+   * Determine if the mouse coordinates refer to the same grid square 
+   */
+  private def sameSquare(mx1:Int, my1:Int, mx2:Int, my2:Int):Boolean = {
+    pointToColumnRow(mx1, my1) == pointToColumnRow(mx2, my2)
+  }
+
+  private def sameSquare(p1:Tuple2[Int,Int], p2:Tuple2[Int,Int]):Boolean = {
+    sameSquare(p1._1, p1._2, p2._1, p2._2)
+  }
   
   override def paint(g: Graphics2D): Unit = {
     super.paint(g)
@@ -284,7 +321,12 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
     val toColorDifferently:List[Tuple2[Int,Int]] = 
       if (middleDown) {
         val center = pointToColumnRow(middlePoint._1, middlePoint._2)
-        field.adjacentCoordinates(center._1, center._2) ++ List(center)
+        center :: field.adjacentCoordinates(center._1, center._2)
+      }
+      // Show the currently pressed square as a diff color, as long as the mouse
+      // resides within it
+      else if (leftDown && sameSquare(leftPoint, curPoint)) {
+        List(pointToColumnRow(leftPoint._1, leftPoint._2))
       }
       else {
         Nil
