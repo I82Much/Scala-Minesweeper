@@ -141,11 +141,12 @@ object MinefieldView {
   import java.awt.image.BufferedImage
   import javax.imageio.ImageIO
   import java.io.File
-  val flag:BufferedImage = ImageIO.read(new File("red_flag_32.png"))
-  val bomb:BufferedImage = ImageIO.read(new File("bomb_128.png"))
-  val happy:BufferedImage = ImageIO.read(new File("happy.png"))
-  val cool:BufferedImage = ImageIO.read(new File("cool.png"))
-  val sad:BufferedImage = ImageIO.read(new File("sad.png"))
+  val iconHome = "icons/"
+  val flag:BufferedImage = ImageIO.read(new File(iconHome + "red_flag_32.png"))
+  val bomb:BufferedImage = ImageIO.read(new File(iconHome + "bomb_128.png"))
+  val happy:BufferedImage = ImageIO.read(new File(iconHome + "happy.png"))
+  val cool:BufferedImage = ImageIO.read(new File(iconHome + "cool.png"))
+  val sad:BufferedImage = ImageIO.read(new File(iconHome + "sad.png"))
 }
 
 class MinefieldView(field:Minefield) extends Panel with Observer {
@@ -156,6 +157,9 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
   import TextPlacer._
   import java.awt.geom.AffineTransform
   import java.awt.image.BufferedImage
+  import java.awt.event.MouseEvent
+  import java.awt.event.InputEvent
+
   
   val squareSize = MinefieldView.flag.getWidth()
   val numRows = field.numRows()
@@ -166,6 +170,10 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
   val unexploredColor = Color.BLUE
   val exploredColor = Color.GRAY.brighter()
   val gridLineColor = Color.WHITE
+  
+  
+  var middleDown = false
+  var middlePoint:Tuple2[Int,Int] = (0,0)
   
   listenTo(mouse.clicks, mouse.moves)
   
@@ -188,14 +196,39 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
   
   // TODO: Listen for right clicks to cycle through
   reactions += {
-    // case MouseDragged(src, point, mods) => println("mouse dragged")
-    // case MouseReleased(src, point, i1, i2, b) => handleMousePress(point, i1,i2,b)
+    case MouseDragged(src, point, mods) => if (middleDown) { middlePoint = (point.x, point.y); repaint() }
+    case MouseReleased(src, point, i1, i2, b) => middleDown = false; repaint()
     case MousePressed(src, point, i1, i2, b) => handleMousePress(point, i1, i2, b)
     // case e => println("=> "+e.toString)
   }
   
+  
+  
   def handleMousePress(point:Point, modifiers:Int, clicks:Int, triggersPopup:Boolean):Unit = {
     val colRow = pointToColumnRow(point)
+    
+    // Determine if both left and right buttons pressed: http://www.daniweb.com/forums/thread123929.html
+    val onMask = InputEvent.BUTTON1_DOWN_MASK & InputEvent.BUTTON3_DOWN_MASK
+    val offMask = InputEvent.BUTTON1_DOWN_MASK | InputEvent.BUTTON3_DOWN_MASK
+    if ( (modifiers & InputEvent.BUTTON1_DOWN_MASK) != 0) {
+      println("Left down")
+    }
+    if ((modifiers & InputEvent.BUTTON2_DOWN_MASK) != 0) {
+      println("2 down")
+    }
+    if ((modifiers & InputEvent.BUTTON3_DOWN_MASK) != 0) {
+      println("3 down")
+    }
+    
+    
+    if ( (modifiers & (onMask | offMask)) == onMask) {
+      middleDown = true
+      middlePoint = (point.x, point.y)
+      println(middlePoint)
+      repaint()
+    }
+    
+    
     if (triggersPopup) {
       field.toggleFlag(colRow._1, colRow._2)
     }
@@ -246,9 +279,25 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
       val (width, height) = (x2-x1, y2-y1)
       new Rectangle(x1,y1,width,height)
     }
+    
+    
+    val toColorDifferently:List[Tuple2[Int,Int]] = 
+      if (middleDown) {
+        val center = pointToColumnRow(middlePoint._1, middlePoint._2)
+        field.adjacentCoordinates(center._1, center._2) ++ List(center)
+      }
+      else {
+        Nil
+      }
+    
 
     def drawUnexplored(x:Int, y:Int):Unit = {
-      g.setColor(unexploredColor)
+      if (toColorDifferently.contains(x,y)) {
+        g.setColor(Color.ORANGE)
+      }
+      else {
+        g.setColor(unexploredColor)
+      }
       val bounds = rect(x,y)
       g.fillRect(bounds.x, bounds.y, bounds.width, bounds.height)
     }
@@ -271,6 +320,8 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
       val bounds = rect(x,y)
       drawIcon(bounds, MinefieldView.bomb)
     }
+    
+    
     
     def drawExplored(x:Int, y:Int):Unit = {
       g.setColor(exploredColor)
@@ -360,6 +411,9 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
   // Can either move forward, stay put, or move back
   private val moves = List(1,0,-1)
   private val adjacent8Directions = (for (x<-moves; y<-moves) yield(x,y)).filter(x=>x!=(0,0))
+  
+  def adjacentCoordinates(x:Int, y:Int) = adjacent8Directions.map(loc=>(x+loc._1, y+loc._2)).filter(!outOfBounds(_))
+  
     
   private var numFlagsRemaining:Int = numMines
   
