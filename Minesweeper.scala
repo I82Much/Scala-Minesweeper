@@ -9,6 +9,7 @@ import swing.Swing._
 import swing.{Frame,Panel,Button,BoxPanel,FlowPanel,Dimension,Orientation}
 import java.awt.Color
 import java.util.{Observable,Observer}
+import swing.event.{WindowClosing}
 
 object Minesweeper {
 
@@ -34,10 +35,9 @@ object Minesweeper {
       visible=true
       contents = view
       title = "Minesweeper"
-      // reactions += {
-      //         x => System.exit(0)
-      //         // case WindowClosing(e) => System.exit(0)
-      //       }
+      reactions += {
+        case WindowClosing(e) => System.exit(0)
+      }
     }
     println(mineField)
   }
@@ -487,7 +487,12 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
   private def expandEmptySpace(toExpand:ListBuffer[Coord], previouslyVisited:ListBuffer[Coord], x:Int, y:Int):Unit = {
       
     // Stop the recursion
-    if (outOfBounds(x,y) || previouslyVisited.contains(x,y) ){ return Unit }
+    if (outOfBounds(x,y) || 
+        previouslyVisited.contains(x,y) ||  
+        explorationStatus(x,y) == ExplorationStatus.Flagged || 
+        explorationStatus(x,y) == ExplorationStatus.Question) { 
+          return Unit 
+    }
       
       
     val coord = (x,y)
