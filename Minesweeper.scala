@@ -30,12 +30,6 @@ object Minesweeper {
     mineField.addObserver(scoreboard)
     mineField.addObserver(minefieldView)
     
-    
-    // val view = new MinefieldView(mineField)
-    // val view = new MinefieldPanel(mineField)
-    
-    // val view = new MinefieldScoreboard(mineField)
-    
     val frame = new Frame() {
       visible=true
       contents = view
@@ -49,10 +43,6 @@ object Minesweeper {
   }
 }
 
-// class MinefieldPanel(field:Minefield) extends FlowPanel {
-//   override def contents() = List(new MinefieldScoreboard(field), new MinefieldView(field))
-//   preferredSize = new Dimension(600, 600)
-// }
 
 class MinefieldScoreboard(field:Minefield) extends FlowPanel with Observer {
   import scala.swing._
@@ -71,21 +61,92 @@ class MinefieldScoreboard(field:Minefield) extends FlowPanel with Observer {
   override def update(o:Observable, arg:Any):Unit = {
     numMines.text = field.numFlags().toString
   }
+}
+
+object TextPlacer {
+  import java.awt.font.{TextLayout}
+  import java.awt.{Font}
+  import java.awt.geom.Rectangle2D
+  
+  object AnchorPoint extends Enumeration {
+    type AnchorPoint = Value
+    val UpperLeft, TopCenter, UpperRight, RightCenter, BottomRight, BottomCenter, BottomLeft, LeftCenter, Center = Value
+  }
+  
+  def drawText(text:String, point:AnchorPoint.Value, g2:Graphics2D, x:Float, y:Float):Unit = {
+    val layout:TextLayout = new TextLayout(text, g2.getFont(), g2.getFontRenderContext())
+    drawText(layout, point, g2, x, y)
+  }
+  
+  def drawText(text:TextLayout, point:AnchorPoint.Value, g2:Graphics2D, x:Float, y:Float):Unit = {
+    val bounds:Rectangle2D = text.getBounds()
+    val midYOffset = (bounds.getHeight()/2).asInstanceOf[Float]
+    val midXOffset = (-bounds.getWidth()/2).asInstanceOf[Float]
+
+    val topYOffset = bounds.getHeight().asInstanceOf[Float]
+    val bottomYOffset = 0.0f
+
+    val leftXOffset = 0.0f
+    val rightXOffset = -bounds.getWidth().asInstanceOf[Float]
+
+    // Adjust x values
+    val translationX = point match {
+        // Left
+        case AnchorPoint.UpperLeft => leftXOffset
+        case AnchorPoint.BottomLeft => leftXOffset
+        case AnchorPoint.LeftCenter => leftXOffset
+        // Mid
+        case AnchorPoint.TopCenter => midXOffset
+        case AnchorPoint.BottomCenter => midXOffset
+        case AnchorPoint.Center => midXOffset;
+        // Right
+        case AnchorPoint.UpperRight => rightXOffset
+        case AnchorPoint.RightCenter => rightXOffset
+        case AnchorPoint.BottomRight => rightXOffset
+    }
+
+    // Adjust y values
+    val translationY = point match {
+        // Top
+        case AnchorPoint.UpperLeft    => topYOffset
+        case AnchorPoint.UpperRight   => topYOffset
+        case AnchorPoint.TopCenter    => topYOffset
+        // Mid
+        case AnchorPoint.LeftCenter   => midYOffset
+        case AnchorPoint.Center       => midYOffset
+        case AnchorPoint.RightCenter  => midYOffset
+        // Bottom
+        case AnchorPoint.BottomLeft   => bottomYOffset
+        case AnchorPoint.BottomCenter => bottomYOffset
+        case AnchorPoint.BottomRight  => bottomYOffset
+    }
+    text.draw(g2, x + translationX, y + translationY);
+  }
+    
+  
+  
   
 }
+
+
 
 class MinefieldView(field:Minefield) extends Panel with Observer {
   import Minestatus._
   import ExplorationStatus._
-  import scala.swing.event.{MouseDragged,MousePressed}
+  import scala.swing.event.{MouseDragged,MousePressed,MouseReleased}
   import java.awt.Point
+  import TextPlacer._
   
   val squareSize = 20
   val numRows = field.numRows()
   val numCols = field.numCols()
   val mines = field.mineStatus()
   preferredSize = new Dimension(squareSize * field.numCols(), squareSize * field.numRows())
-
+  
+  val unexploredColor = Color.BLUE
+  val exploredColor = Color.GRAY.brighter()
+  val gridLineColor = Color.WHITE
+  
   listenTo(mouse.clicks, mouse.moves)
   
   override def update(o:Observable, arg:Any):Unit = {
@@ -108,6 +169,7 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
   // TODO: Listen for right clicks to cycle through
   reactions += {
     // case MouseDragged(src, point, mods) => println("mouse dragged")
+    // case MouseReleased(src, point, i1, i2, b) => handleMousePress(point, i1,i2,b)
     case MousePressed(src, point, i1, i2, b) => handleMousePress(point, i1, i2, b)
     // case e => println("=> "+e.toString)
   }
@@ -151,16 +213,18 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
     val gridWidth = width / numCols
     val gridHeight = height / numRows
     
-    val numColMap = Map(1->Color.BLUE, 2->Color.GREEN, 3->Color.RED, 4->Color.RED)
+    val numberColorMap = Map(1->Color.BLUE, 2->Color.GREEN, 3->Color.RED, 4->Color.BLACK)
     
-    
+    // the y locs of row i are at i and i + 1.  Similarly for column
+    val rowGridLines:List[Int] = (0 until numRows + 1).toList.map(map(_, 0, numRows, 0, height-1).asInstanceOf[Int])
+    val colGridLines:List[Int] = (0 until numCols + 1).toList.map(map(_, 0, numCols, 0, width-1).asInstanceOf[Int])
     g.clearRect(0,0,width,height)
     
-    val unexploredColor = Color.BLUE
-    val exploredColor = Color.GRAY.brighter()
-    
     def rect(x:Int, y:Int):Rectangle = {
-      new Rectangle(gridWidth * x, gridHeight * y, gridWidth, gridHeight)
+      val (x1, y1) = (colGridLines(x), rowGridLines(y))
+      val (x2, y2) = (colGridLines(x+1), rowGridLines(y+1))
+      val (width, height) = (x2-x1, y2-y1)
+      new Rectangle(x1,y1,width,height)
     }
 
     def drawUnexplored(x:Int, y:Int):Unit = {
@@ -189,72 +253,54 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
       else {
         val numAdjacent = field.numAdjacent(x,y)
         if (numAdjacent != 0) {
-          g.setColor(numColMap.getOrElse(numAdjacent, Color.RED))
-          g.drawString(numAdjacent.toString, bounds.x + bounds.width/2, bounds.y + bounds.height/2)
+          g.setColor(numberColorMap.getOrElse(numAdjacent, Color.RED))
+          val cx = bounds.x + bounds.width/2
+          val cy = bounds.y + bounds.height/2
+          TextPlacer.drawText(numAdjacent.toString, AnchorPoint.Center, g, cx, cy)
         }
       }
     }
     def drawFlag(x:Int, y:Int):Unit = {
       drawUnexplored(x,y)
       val bounds = rect(x,y)
+      val cx = bounds.x + bounds.width/2
+      val cy = bounds.y + bounds.height/2
       g.setColor(Color.RED)
-      g.drawString("F", bounds.x + bounds.width/2, bounds.y + bounds.height/2)
+      TextPlacer.drawText("F", AnchorPoint.Center, g, cx, cy)
     }
     def drawQuestion(x:Int, y:Int):Unit = {
       drawUnexplored(x,y)
       val bounds = rect(x,y)
       g.setColor(Color.WHITE)
-      g.drawString("?", bounds.x + bounds.width/2, bounds.y + bounds.height/2)
+      val cx = bounds.x + bounds.width/2
+      val cy = bounds.y + bounds.height/2
+      TextPlacer.drawText("?", AnchorPoint.Center, g, cx, cy)
     }
-    // g.setColor(Color.RED)
-    // Draw the mines
+
     for (x <- 0 until numCols) {
       for (y <- 0 until numRows) {
-        val x1 = gridWidth * x
-        val y1 = gridHeight * y
-        
-        val status:ExplorationStatus = field.explorationStatus(x,y)
-        status match {
+
+        // val status:ExplorationStatus = field.explorationStatus(x,y)
+        field.explorationStatus(x,y) match {
           case ExplorationStatus.Unexplored => drawUnexplored(x,y)
           case ExplorationStatus.Explored => drawExplored(x,y)
           case ExplorationStatus.Flagged => drawFlag(x,y)
           case ExplorationStatus.Question => drawQuestion(x,y)
         }
-        
-        
-        // if (mines(y)(x) == Minestatus.Dangerous) {
-        //   // Draw an x
-        //   g.drawLine(x1,y1,x1+gridWidth,y1+gridHeight)
-        //   g.drawLine(x1,y1+gridHeight,x1+gridWidth,y1)
-        // }
-        // // Draw the number 
-        // else {
-        //   g.drawString(String.valueOf(field.numAdjacent(x,y)), x1+gridWidth/2, y1+gridHeight/2)
-        // }
       }
     }
     
-    // val debug = true
-    //     if (debug) {
-    //       g.setColor(new Color(0,0,255,128))
-    //     }
-    //     else {
-    //       g.setColor(Color.BLUE);
-    //     }
-    //   
-    //     g.fillRect(0,0,width,height)
-    
     // Draw the grid lines
-    g.setColor(Color.WHITE)
-    // g.drawRect(0,0,width,height)
+    g.setColor(gridLineColor)
+
     // Draw horizontal lines
     for (row <- 0 until numRows + 1) {
-      val y = map(row, 0, numRows, 0, height-1).asInstanceOf[Int]
+      val y = rowGridLines(row)
       g.drawLine(0,y,width,y)
     }
     // Vertical lines
     for (col <- 0 until numCols + 1) {
-      val x = map(col, 0, numCols, 0, width-1).asInstanceOf[Int]
+      val x = colGridLines(col)
       g.drawLine(x,0,x,height)
     }
   }
