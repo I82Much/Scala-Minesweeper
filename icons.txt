@@ -4,3 +4,15 @@ http://www.iconfinder.com/icondetails/36057/32/
 
 #bomb
 http://www.iconfinder.com/icondetails/1232/128/bomb_explosive_icon
+
+#smileys
+http://www.iconfinder.com/icondetails/12859/32/ok_smiley_icon
+http://www.iconfinder.com/icondetails/12861/32/happy_really_smiley_icon
+http://www.iconfinder.com/icondetails/12856/32/confused_smiley_icon
+http://www.iconfinder.com/icondetails/12864/32/smiley_wink_icon
+http://www.iconfinder.com/icondetails/12855/32/angry_smiley_icon
+http://www.iconfinder.com/icondetails/12860/32/oooh_smiley_icon
+http://www.iconfinder.com/icondetails/12863/32/smiley_surprised_icon
+http://www.iconfinder.com/icondetails/12858/32/happy_smiley_icon
+http://www.iconfinder.com/icondetails/12862/32/sad_smiley_icon
+http://www.iconfinder.com/icondetails/12857/32/cool_smiley_icon
