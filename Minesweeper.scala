@@ -220,10 +220,12 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
       field.expand(colRow._1, colRow._2)
     }
     
-    // If the middle is down, attempt to expand all of them if it's unambiguous
     if (middleDown) {
-      for (coord <- field.adjacentCoordinates(colRow._1, colRow._2)) {
-       field.expand(coord._1, coord._2)
+      val (x,y) = colRow
+      // We don't always expand adjacent, but only when player has unambiguously
+      // flagged the squares that he thinks are mines in the vicinity
+      if (field.shouldExpandAdjacent(x,y)) {
+        field.expandAdjacent(x,y)
       }
     }
     
@@ -322,13 +324,16 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
       new Rectangle(x1,y1,width,height)
     }
     
+    
+    
     // Don't color these differently
-    // val ignored = List(ExplorationStatus.Flagged, ExplorationStatus.Question)
+    val ignored = List(ExplorationStatus.Flagged, ExplorationStatus.Question)
     
     val toColorDifferently:List[Tuple2[Int,Int]] = 
       if (middleDown) {
         val center = pointToColumnRow(middlePoint._1, middlePoint._2)
-        (center :: field.adjacentCoordinates(center._1, center._2))//.filter(!ignored.contains(_))
+        val adjacentCoords = (center :: field.adjacentCoordinates(center._1, center._2))
+        adjacentCoords.filter(loc => field.explorationStatus(loc._1,loc._2) == ExplorationStatus.Unexplored)
       }
       // Show the currently pressed square as a diff color, as long as the mouse
       // resides within it
@@ -338,11 +343,21 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
       else {
         Nil
       }
-    
+      
+
+    val center = pointToColumnRow(curPoint._1, curPoint._2)
+    val diffColor:Color = 
+      if (middleDown && !field.shouldExpandAdjacent(center._1,center._2)) {
+        Color.RED
+      }
+      else {
+        Color.ORANGE
+      }
+      
 
     def drawUnexplored(x:Int, y:Int):Unit = {
       if (toColorDifferently.contains(x,y)) {
-        g.setColor(Color.ORANGE)
+        g.setColor(diffColor)
       }
       else {
         g.setColor(unexploredColor)
@@ -506,11 +521,15 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
   
   private var mines:Array[Array[Minestatus.Value]] = fromLocations(mineLocs)
   
-  
-  
   private var field:Array[Array[ExplorationStatus.Value]] = initField()
   
   def explorationStatus(x:Int, y:Int) = field(y)(x)
+  
+  def isExplored(x:Int, y:Int) = explorationStatus(x,y) == ExplorationStatus.Explored
+  def isFlagged(x:Int, y:Int) = explorationStatus(x,y) == ExplorationStatus.Flagged
+  def isQuestion(x:Int, y:Int) = explorationStatus(x,y) == ExplorationStatus.Question
+
+  
   
   def mineStatus() = mines
  
@@ -667,6 +686,28 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
     }
   }
   
+  
+  /**
+   * Determines whether the rules of game permit the alternative mode of
+   * clearing mines to occur at this x,y loc.  The rule is simple:
+   * have you flagged an equal number of mines in the squares adjacent to
+   * the x, y loc as there are potential mines.
+   */
+  def shouldExpandAdjacent(x:Int, y:Int):Boolean = {
+    isExplored(x,y) && {
+      val toExpand = adjacentCoordinates(x,y)
+      val numMinesFlaggedAdjacent = toExpand.filter(loc=>isFlagged(loc._1,loc._2)).size
+      numMinesFlaggedAdjacent == numAdjacent(x,y)
+    }
+  }
+
+  // TODO: Shouldn't automatically go into kill when mined
+  def expandAdjacent(x:Int, y:Int):Unit = {
+    val toExpand = adjacentCoordinates(x,y)
+    toExpand.foreach(loc => expand(loc._1, loc._2))
+  }
+  
+
   // TODO: Refactor this
   def expand(x:Int, y:Int):Unit = {
     // If they click on a ? or Flag, ignore it
@@ -674,7 +715,6 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
     if (ignored.contains(explorationStatus(x,y))) {
       return Unit
     }
-    
     
     // If they clicked on a mine, it's game over
     if (isMine(x,y)) {
