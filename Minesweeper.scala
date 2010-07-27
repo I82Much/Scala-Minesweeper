@@ -528,8 +528,7 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
   def isExplored(x:Int, y:Int) = explorationStatus(x,y) == ExplorationStatus.Explored
   def isFlagged(x:Int, y:Int) = explorationStatus(x,y) == ExplorationStatus.Flagged
   def isQuestion(x:Int, y:Int) = explorationStatus(x,y) == ExplorationStatus.Question
-
-  
+  def isUnexplored(x:Int, y:Int) = explorationStatus(x,y) == ExplorationStatus.Unexplored
   
   def mineStatus() = mines
  
@@ -673,18 +672,27 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
       case ExplorationStatus.Question => ExplorationStatus.Unexplored
       case _ => field(y)(x)
     }
+    if (hasWon()) {
+      win()
+    }
     changed()
   }
   
-  def kill(): Unit = {
+  private def lose(): Unit = {
     dead = true
-    // expand everything
-    for (row <- 0 until numRows) {
-      for (col <- 0 until numCols) {
-        field(row)(col) = ExplorationStatus.Explored
-      }
-    }
+    fillBoard(ExplorationStatus.Explored)
   }
+  
+  private def win(): Unit = {
+    won = true
+    fillBoard(ExplorationStatus.Explored)
+  }
+  
+  private def fillBoard(status:ExplorationStatus.Value):Unit = {
+    field = Array.fill(numRows, numCols)(status)
+  }
+  
+  
   
   
   /**
@@ -696,7 +704,7 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
   def shouldExpandAdjacent(x:Int, y:Int):Boolean = {
     isExplored(x,y) && {
       val toExpand = adjacentCoordinates(x,y)
-      val numMinesFlaggedAdjacent = toExpand.filter(loc=>isFlagged(loc._1,loc._2)).size
+      val numMinesFlaggedAdjacent = toExpand.count(loc=>isFlagged(loc._1,loc._2))
       numMinesFlaggedAdjacent == numAdjacent(x,y)
     }
   }
@@ -718,7 +726,7 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
     
     // If they clicked on a mine, it's game over
     if (isMine(x,y)) {
-      kill()
+      lose()
       changed()
     }
     
@@ -744,6 +752,10 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
       expandZeroSquare()
     }
     
+    if (hasWon()) {
+      win()
+    }
+    
     changed()
   }
   
@@ -766,8 +778,14 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
   // TODO: calculate when they've won
   
   def hasWon():Boolean = {
-    // See if all of the 
-    mineLocs.forall(loc => explorationStatus(loc._1, loc._2) == ExplorationStatus.Flagged)
+    // Only non explored or flagged left
+    val explorationStatuses = field.flatten
+    val numExplored = explorationStatuses.count(_ == ExplorationStatus.Explored)
+    val numFlagged = explorationStatuses.count(_ == ExplorationStatus.Flagged)
+    val numQuestion = explorationStatuses.count(_ == ExplorationStatus.Question)
+    val numUnexplored = explorationStatuses.count(_ == ExplorationStatus.Unexplored)
+    
+    numQuestion == 0 && numUnexplored + numFlagged == numMines
   }
   
 }
