@@ -12,10 +12,22 @@ import java.util.{Observable,Observer}
 import swing.event.{WindowClosing}
 
 object Minesweeper {
-
+  
+  // http://en.wikipedia.org/wiki/Minesweeper_%28Windows%29
+  // Beginner: 8 × 8 or 9 × 9 field with 10 mines
+  // Intermediate: 16 × 16 field with 40 mines
+  // Expert: 30 × 16 field with 99 mines
+  // Custom: Any values from 8 × 8 or 9 × 9 to 30 × 24 field, with 10 to 667 mines
+  // [the maximum number of mines allowed for a field of size A × B is [(A − 1) × (B − 1)].
+  def beginner = (8,8,10)
+  def intermediate = (16,16,40)
+  def expert = (30,16,99)
+  
   def main(args:Array[String]) {
     
-    val mineField = new Minefield(10,10,10)
+    val difficulty = expert
+    
+    val mineField = new Minefield(9,8,10)//difficulty._1, difficulty._2, difficulty._3)
     val scoreboard = new MinefieldScoreboard(mineField)
     val minefieldView = new MinefieldView(mineField)
     
@@ -578,7 +590,7 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
     // on the board, and check how many of those are mines.
     // To avoid special case logic at edges and corners, we extend the board
     // one square in each direction
-    val scratchBoard = Array.fill(width+2,height+2)(Minestatus.Safe)
+    val scratchBoard = Array.fill(height+2,width+2)(Minestatus.Safe)
     
     // Copy the interior section of the board
     var counter = 0
@@ -590,7 +602,7 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
     }
     
     // Now loop through and count up
-    val answers = Array.fill(width,height)(0)
+    val answers = Array.fill(height,width)(0)
     for (row <- 0 until height) {
       for (col <- 0 until width) {
         var counter = 0
