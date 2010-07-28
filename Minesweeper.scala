@@ -210,10 +210,14 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
     }
     case MouseReleased(src, point, i1, i2, b) => mouseReleased(point, i1, i2, b)
     case MousePressed(src, point, i1, i2, b) => handleMousePress(point, i1, i2, b)
+//    case MouseExited(src, point, modifiers) => 
     // case e => println("=> "+e.toString)
   }
   
   def mouseReleased(point:Point, modifiers:Int, clicks:Int, triggersPopup:Boolean):Unit = {
+    if (field.isDead()) { return Unit }
+    
+    
     val colRow = pointToColumnRow(point)
     
     if (leftDown && sameSquare(leftPoint, (point.x, point.y))) {
@@ -237,6 +241,8 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
   }
   
   def handleMousePress(point:Point, modifiers:Int, clicks:Int, triggersPopup:Boolean):Unit = {
+    if (field.isDead()) { return Unit }
+    
     val colRow = pointToColumnRow(point)
     
     // Determine if both left and right buttons pressed: http://www.daniweb.com/forums/thread123929.html
@@ -366,6 +372,8 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
       g.fillRect(bounds.x, bounds.y, bounds.width, bounds.height)
     }
     
+    // Draw a buffered image within the given bounds.  Used
+    // to draw the flag and mine icons
     def drawIcon(bounds:Rectangle, icon:BufferedImage):Unit = {
       val xScale = bounds.width / icon.getWidth().asInstanceOf[Float]
       val yScale = bounds.height / icon.getHeight().asInstanceOf[Float] 
@@ -388,7 +396,16 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
     
     
     def drawExplored(x:Int, y:Int):Unit = {
-      g.setColor(exploredColor)
+      
+      val fillColor = 
+        if (field.isDetonated(x,y)) {
+          Color.RED
+        }
+        else {
+          exploredColor
+        }
+      
+      g.setColor(fillColor)
       val bounds = rect(x,y)
       g.fillRect(bounds.x, bounds.y, bounds.width, bounds.height)
       
@@ -425,8 +442,6 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
 
     for (x <- 0 until numCols) {
       for (y <- 0 until numRows) {
-
-        // val status:ExplorationStatus = field.explorationStatus(x,y)
         field.explorationStatus(x,y) match {
           case ExplorationStatus.Unexplored => drawUnexplored(x,y)
           case ExplorationStatus.Explored => drawExplored(x,y)
@@ -457,6 +472,8 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
 object Minestatus extends Enumeration {
   val Safe = Value("Safe")
   val Dangerous = Value("Dangerous")
+  val Misflagged = Value("Misflagged")
+  val Detonated = Value("Detonated")
 }
 
 object ExplorationStatus extends Enumeration {
@@ -546,6 +563,7 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
 
   def reset() {
     dead = false
+    won = false
     numFlagsRemaining = numMines
     mineLocs = calculateMineLocations()
     mines = fromLocations(mineLocs)
@@ -654,7 +672,7 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
   
   
   def isMine(x:Int, y:Int):Boolean = {
-    mines(y)(x) == Minestatus.Dangerous
+    mines(y)(x) != Minestatus.Safe
   }
   
   def numFlags() = {
@@ -672,15 +690,16 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
       case ExplorationStatus.Question => ExplorationStatus.Unexplored
       case _ => field(y)(x)
     }
-    if (hasWon()) {
+    if (playerWon()) {
       win()
     }
     changed()
   }
   
-  private def lose(): Unit = {
+  private def lose(x:Int,y:Int): Unit = {
     dead = true
     fillBoard(ExplorationStatus.Explored)
+    mines(y)(x) = Minestatus.Detonated
   }
   
   private def win(): Unit = {
@@ -726,7 +745,7 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
     
     // If they clicked on a mine, it's game over
     if (isMine(x,y)) {
-      lose()
+      lose(x,y)
       changed()
     }
     
@@ -752,11 +771,15 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
       expandZeroSquare()
     }
     
-    if (hasWon()) {
+    if (playerWon()) {
       win()
     }
     
     changed()
+  }
+  
+  def isDetonated(x:Int, y:Int) = {
+    mines(y)(x) == Minestatus.Detonated
   }
   
   
@@ -777,7 +800,7 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
   private var won = false
   // TODO: calculate when they've won
   
-  def hasWon():Boolean = {
+  private def playerWon():Boolean = {
     // Only non explored or flagged left
     val explorationStatuses = field.flatten
     val numExplored = explorationStatuses.count(_ == ExplorationStatus.Explored)
@@ -787,6 +810,8 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
     
     numQuestion == 0 && numUnexplored + numFlagged == numMines
   }
+  
+  def hasWon():Boolean = won
   
 }
 
