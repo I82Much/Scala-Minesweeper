@@ -9,7 +9,7 @@ import swing.Swing._
 import swing.{Frame,Panel,Button,BoxPanel,FlowPanel,Dimension,Orientation}
 import java.awt.Color
 import java.util.{Observable,Observer}
-import swing.event.{WindowClosing}
+import swing.event.{WindowClosing,MouseDragged,MousePressed,MouseReleased}
 
 object Minesweeper {
   
@@ -23,18 +23,27 @@ object Minesweeper {
   def intermediate = (16,16,40)
   def expert = (30,16,99)
   
+  case class Difficulty(numRows:Int, numCols:Int, numFlags:Int) {}
+  object Beginner extends Difficulty(8,8,10) {}
+  object Intermediate extends Difficulty(16,16,40) {}
+  object Expert extends Difficulty(16,30,99) {}
+  
+  
   def main(args:Array[String]) {
     
-    val difficulty = expert
+    // val difficulty = expert
+    val difficulty = Expert
     
-    val mineField = new Minefield(9,8,10)//difficulty._1, difficulty._2, difficulty._3)
+    // val mineField = new Minefield(difficulty._1, difficulty._2, difficulty._3)
+    val mineField = new Minefield(difficulty.numCols, difficulty.numRows, difficulty.numFlags)
+    
     val scoreboard = new MinefieldScoreboard(mineField)
-    val minefieldView = new MinefieldView(mineField)
+    val minefieldView = new MinefieldView(mineField, scoreboard)
     
     val view = new BoxPanel(Orientation.Vertical) {
       contents ++ List(scoreboard, minefieldView)
     }
-
+    // Make the minefield model update the views when it changes
     mineField.addObserver(scoreboard)
     mineField.addObserver(minefieldView)
     
@@ -51,37 +60,80 @@ object Minesweeper {
 }
 
 
+/**
+* The scoreboard consists of three parts:
+* * A display showing how many seconds have elapsed
+* * A button with a friendly smiley face button reflecting state of game, as well
+*   as serving as a reset button
+* * A counter showing how many flags have been placed (how many mines are )
+*/
 class MinefieldScoreboard(field:Minefield) extends FlowPanel with Observer {
   import scala.swing._
   import javax.swing.ImageIcon
+  import java.awt.image.BufferedImage
+  import javax.swing.{Timer}
+  import java.awt.event.{ActionListener,ActionEvent}
   
-  val timer:Label = new Label("400")
+  val deadIcon = new ImageIcon(MinefieldView.sad)
+  val winIcon = new ImageIcon(MinefieldView.cool)
+  val defaultIcon = new ImageIcon(MinefieldView.happy)
+  val mousePressedIcon = new ImageIcon(MinefieldView.excited)
+  
+  
+  var seconds = 0
+  
+  // Handles updating the timer
+  val timerTask = new ActionListener() {
+    override def actionPerformed(evt:ActionEvent):Unit = {
+      seconds += 1
+      timerLabel.text = seconds.toString
+    }
+  }
+  val timer = new Timer(1000, timerTask)
+  val timerLabel:Label = new Label(seconds.toString)
+  
+  // Resets both the board and the timer
   val reset:Button = new Button() {
     action = new Action("") {
+      val scoreboard = MinefieldScoreboard.this
       override def apply():Unit = {
         field.reset()
+          scoreboard.seconds = 0
+        scoreboard.timerLabel.text = "0"
+        timer.restart
       }
     }
-    icon = new ImageIcon(MinefieldView.happy)
+    icon = defaultIcon
   }
-  val numMines:Label = new Label(field.numFlags.toString)
-  contents ++ List(timer, reset, numMines)
-  // override def contents() = List(timer, reset, numMines)
+  
+  val numFlags:Label = new Label(field.numFlags.toString)
+  
+  // This scoreboard consists of the label showing time elapsed, the reset/smiley face
+  // icon, and the number of flags that have been placed
+  contents ++ List(timerLabel, reset, numFlags)
+  
+  
+  
+  def mousePressed():Unit = { reset.icon = mousePressedIcon; Unit }
+  // def mouseReleased():Unit = {reset.icon = defaultIcon; Unit }
   
   override def update(o:Observable, arg:Any):Unit = {
-    numMines.text = field.numFlags().toString
-    
+    numFlags.text = field.numFlags().toString
+    if (field.gameOver) { timer.stop }
     reset.icon = 
       if (field.isDead) {
-        new ImageIcon(MinefieldView.sad)
+        deadIcon
       }
       else if (field.hasWon) {
-        new ImageIcon(MinefieldView.cool)
+        winIcon
       }
       else {
-        new ImageIcon(MinefieldView.happy)
+        defaultIcon
       }
   }
+  
+  
+  timer.start
 }
 object TextPlacer {
   import java.awt.font.{TextLayout}
@@ -157,11 +209,12 @@ object MinefieldView {
   val flag:BufferedImage = ImageIO.read(new File(iconHome + "red_flag_32.png"))
   val bomb:BufferedImage = ImageIO.read(new File(iconHome + "bomb_128.png"))
   val happy:BufferedImage = ImageIO.read(new File(iconHome + "happy.png"))
+  val excited:BufferedImage = ImageIO.read(new File(iconHome + "ooh.png"))
   val cool:BufferedImage = ImageIO.read(new File(iconHome + "cool.png"))
   val sad:BufferedImage = ImageIO.read(new File(iconHome + "sad.png"))
 }
 
-class MinefieldView(field:Minefield) extends Panel with Observer {
+class MinefieldView(field:Minefield, scoreboard:MinefieldScoreboard) extends Panel with Observer {
   import Minestatus._
   import ExplorationStatus._
   import scala.swing.event.{MouseDragged,MousePressed,MouseReleased}
@@ -211,7 +264,6 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
   }
   
   
-  // TODO: Listen for right clicks to cycle through
   reactions += {
     case MouseDragged(src, point, mods) => {
       if (middleDown) { 
@@ -227,8 +279,7 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
   }
   
   def mouseReleased(point:Point, modifiers:Int, clicks:Int, triggersPopup:Boolean):Unit = {
-    if (field.isDead()) { return Unit }
-    
+    if (field.gameOver()) { return Unit }
     
     val colRow = pointToColumnRow(point)
     
@@ -253,7 +304,7 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
   }
   
   def handleMousePress(point:Point, modifiers:Int, clicks:Int, triggersPopup:Boolean):Unit = {
-    if (field.isDead()) { return Unit }
+    if (field.gameOver()) { return Unit }
     
     val colRow = pointToColumnRow(point)
     
@@ -287,6 +338,9 @@ class MinefieldView(field:Minefield) extends Panel with Observer {
       field.toggleFlag(colRow._1, colRow._2)
     }
     
+    // Just a fun little touch, when mouse is pressed, change the smiley 
+    // face icon in the scoreboard
+    scoreboard.mousePressed
   }
 
   /**
@@ -494,7 +548,7 @@ object ExplorationStatus extends Enumeration {
 }
 
 
-class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
+class Minefield(width:Int, height:Int, numFlags:Int) extends Observable {
   import Minestatus._
   import ExplorationStatus._
   private val random = new Random()
@@ -508,7 +562,7 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
   def adjacentCoordinates(x:Int, y:Int) = adjacent8Directions.map(loc=>(x+loc._1, y+loc._2)).filter(!outOfBounds(_))
   
     
-  private var numFlagsRemaining:Int = numMines
+  private var numFlagsRemaining:Int = numFlags
   
   // Calculates random (x,y) pairs in the given range
   private def pickRandomCoordinates(numCoords:Int, minX:Int, minY:Int, maxX:Int, maxY:Int):List[Coord] = {
@@ -533,7 +587,7 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
   }
 
   private def calculateMineLocations():List[Coord] = {
-    pickRandomCoordinates(numMines, 0, 0, width, height)
+    pickRandomCoordinates(numFlags, 0, 0, width, height)
   }
   
   private var mineLocs = calculateMineLocations()
@@ -576,7 +630,7 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
   def reset() {
     dead = false
     won = false
-    numFlagsRemaining = numMines
+    numFlagsRemaining = numFlags
     mineLocs = calculateMineLocations()
     mines = fromLocations(mineLocs)
     field = initField()
@@ -699,7 +753,7 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
     field(y)(x) = curExploration match {
       case ExplorationStatus.Unexplored => { numFlagsRemaining -= 1; ExplorationStatus.Flagged }
       case ExplorationStatus.Flagged => { numFlagsRemaining += 1; ExplorationStatus.Question }
-      case ExplorationStatus.Question => ExplorationStatus.Unexplored
+      case ExplorationStatus.Question => {ExplorationStatus.Unexplored}
       case _ => field(y)(x)
     }
     if (playerWon()) {
@@ -723,9 +777,6 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
     field = Array.fill(numRows, numCols)(status)
   }
   
-  
-  
-  
   /**
    * Determines whether the rules of game permit the alternative mode of
    * clearing mines to occur at this x,y loc.  The rule is simple:
@@ -735,12 +786,11 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
   def shouldExpandAdjacent(x:Int, y:Int):Boolean = {
     isExplored(x,y) && {
       val toExpand = adjacentCoordinates(x,y)
-      val numMinesFlaggedAdjacent = toExpand.count(loc=>isFlagged(loc._1,loc._2))
-      numMinesFlaggedAdjacent == numAdjacent(x,y)
+      val numFlagsFlaggedAdjacent = toExpand.count(loc=>isFlagged(loc._1,loc._2))
+      numFlagsFlaggedAdjacent == numAdjacent(x,y)
     }
   }
 
-  // TODO: Shouldn't automatically go into kill when mined
   def expandAdjacent(x:Int, y:Int):Unit = {
     val toExpand = adjacentCoordinates(x,y)
     toExpand.foreach(loc => expand(loc._1, loc._2))
@@ -760,7 +810,8 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
       lose(x,y)
       changed()
     }
-    
+    // Expands a square with zero adjacent mines; can cause a cascading effect
+    // by recursively exploring all the adjacent zero mine squares
     def expandZeroSquare(): Unit = {
       field(y)(x) = ExplorationStatus.Explored
       
@@ -790,15 +841,19 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
     changed()
   }
   
+
   def isDetonated(x:Int, y:Int) = {
     mines(y)(x) == Minestatus.Detonated
   }
   
-  
+  /** @returns the number of adjacent mines */
   def numAdjacent(x:Int, y:Int) = {
     adjacentCounts(y)(x)
   }
-  
+
+  /**
+  * @return a 2d representation of the board.
+  */
   override def toString():String = {
     // for all the rows
     val sb = new StringBuilder()
@@ -810,7 +865,6 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
   }
   
   private var won = false
-  // TODO: calculate when they've won
   
   private def playerWon():Boolean = {
     // Only non explored or flagged left
@@ -820,10 +874,10 @@ class Minefield(width:Int, height:Int, numMines:Int) extends Observable {
     val numQuestion = explorationStatuses.count(_ == ExplorationStatus.Question)
     val numUnexplored = explorationStatuses.count(_ == ExplorationStatus.Unexplored)
     
-    numQuestion == 0 && numUnexplored + numFlagged == numMines
+    numQuestion == 0 && numUnexplored + numFlagged == numFlags
   }
   
   def hasWon():Boolean = won
-  
+  def gameOver():Boolean = won || dead
 }
 
