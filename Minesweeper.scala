@@ -14,6 +14,14 @@ import swing.event.{WindowClosing,MouseDragged,MousePressed,MouseReleased}
 
 // TODO: Make sure they can't lose in first click by moving the mine and 
 // recalculating the board's adjacency matrix.
+// TODO: If they've misflagged a square and it leads to their death, make sure
+// you draw an X through the mine
+// TODO: Fix the array out of bound exceptions
+// TODO: Create a class encapsulating the row, column stuff
+
+
+
+
 
 /**
 * Contains the main menu entry point
@@ -32,10 +40,10 @@ object Minesweeper {
   object Expert extends Difficulty(16,30,99) {}
   
   def main(args:Array[String]) {
-    
+
     val difficulty = Expert
     
-    val model = new Minesweeper(difficulty.numCols, difficulty.numRows, difficulty.numFlags)
+    val model = new MinesweeperModel(difficulty.numCols, difficulty.numRows, difficulty.numFlags)
     
     val scoreboard = new MinesweeperScoreboard(model)
     val minefieldView = new MinesweeperView(model, scoreboard)
@@ -55,7 +63,6 @@ object Minesweeper {
       }
       menuBar = new MinesweeperMenu(model)
       visible=true
-      
     }
   }
 }
@@ -64,7 +71,7 @@ object Minesweeper {
 * Provides menu options to the player, including choices for changing the
 * difficulty and viewing high scores
 */
-class MinesweeperMenu(field:Minesweeper) extends MenuBar {
+class MinesweeperMenu(field:MinesweeperModel) extends MenuBar {
   import Minesweeper.Difficulty._
   contents ++
     List(
@@ -88,7 +95,7 @@ class MinesweeperMenu(field:Minesweeper) extends MenuBar {
 *   as serving as a reset button
 * * A counter showing how many flags have been placed (how many mines are remaining)
 */
-class MinesweeperScoreboard(field:Minesweeper) extends FlowPanel with Observer {
+class MinesweeperScoreboard(field:MinesweeperModel) extends FlowPanel with Observer {
   import scala.swing._
   import javax.swing.ImageIcon
   import java.awt.image.BufferedImage
@@ -233,7 +240,7 @@ object MinesweeperView {
 }
 
 
-class MinesweeperView(field:Minesweeper, scoreboard:MinesweeperScoreboard) extends Panel with Observer {
+class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) extends Panel with Observer {
   import Minestatus._
   import ExplorationStatus._
   import scala.swing.event.{MouseDragged,MousePressed,MouseReleased}
@@ -415,8 +422,6 @@ class MinesweeperView(field:Minesweeper, scoreboard:MinesweeperScoreboard) exten
       new Rectangle(x1,y1,width,height)
     }
     
-    
-    
     // Don't color these differently
     val ignored = List(ExplorationStatus.Flagged, ExplorationStatus.Question)
     
@@ -567,11 +572,41 @@ object ExplorationStatus extends Enumeration {
 }
 
 
-class Minesweeper(width:Int, height:Int, numFlags:Int) extends Observable {
+case class Vector2(rowOffset:Int, colOffset:Int) {
+  def +(v:Vector2):Vector2 = {
+    Vector2(rowOffset+v.rowOffset, colOffset + v.colOffset)
+  }
+}
+object Vector2 {
+  val north = Vector2(-1,0)
+  val northEast = Vector2(-1,1)
+  val east = Vector2(0,1)
+  val southEast = Vector2(1,1)
+  val south = Vector2(1,0)
+  val southWest = Vector2(1,-1)
+  val west = Vector2(-1,0)
+  val northWest = Vector2(-1,-1)
+  val zero = Vector2(0,0)
+  
+  val adjacent8 = List(north, northEast, east, southEast, south, southWest, west, northWest)
+  val adjacent4 = List(north, east, south, west)
+}
+
+
+case class Coord2(row:Int, col:Int) {
+  def +(v:Vector2):Coord2 = {
+    Coord2(row + v.rowOffset, col + v.colOffset)
+  }
+}
+
+class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
   import Minestatus._
   import ExplorationStatus._
   import Minesweeper.Difficulty
   private val random = new Random()
+  
+  
+  
   
   type Coord = Tuple2[Int,Int]
   
