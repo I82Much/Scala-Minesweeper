@@ -1,16 +1,23 @@
 import java.util.Random
 import scala.collection.mutable.ListBuffer
-import javax.swing._
+//import javax.swing._
 import java.awt.Graphics
 import java.awt.Graphics2D
 import java.awt.Paint
 import java.awt.Rectangle
 import swing.Swing._
-import swing.{Frame,Panel,Button,BoxPanel,FlowPanel,Dimension,Orientation}
+import swing._//{Frame,Panel,Button,BoxPanel,FlowPanel,Dimension,Orientation,MenuBar,Menu}
 import java.awt.Color
 import java.util.{Observable,Observer}
 import swing.event.{WindowClosing,MouseDragged,MousePressed,MouseReleased}
 
+
+// TODO: Make sure they can't lose in first click by moving the mine and 
+// recalculating the board's adjacency matrix.
+
+/**
+* Contains the main menu entry point
+*/
 object Minesweeper {
   
   // http://en.wikipedia.org/wiki/Minesweeper_%28Windows%29
@@ -19,44 +26,58 @@ object Minesweeper {
   // Expert: 30 × 16 field with 99 mines
   // Custom: Any values from 8 × 8 or 9 × 9 to 30 × 24 field, with 10 to 667 mines
   // [the maximum number of mines allowed for a field of size A × B is [(A − 1) × (B − 1)].
-  def beginner = (8,8,10)
-  def intermediate = (16,16,40)
-  def expert = (30,16,99)
-  
   case class Difficulty(numRows:Int, numCols:Int, numFlags:Int) {}
   object Beginner extends Difficulty(8,8,10) {}
   object Intermediate extends Difficulty(16,16,40) {}
   object Expert extends Difficulty(16,30,99) {}
   
-  
   def main(args:Array[String]) {
     
-    // val difficulty = expert
     val difficulty = Expert
     
-    // val mineField = new Minefield(difficulty._1, difficulty._2, difficulty._3)
-    val mineField = new Minefield(difficulty.numCols, difficulty.numRows, difficulty.numFlags)
+    val model = new Minesweeper(difficulty.numCols, difficulty.numRows, difficulty.numFlags)
     
-    val scoreboard = new MinefieldScoreboard(mineField)
-    val minefieldView = new MinefieldView(mineField, scoreboard)
+    val scoreboard = new MinesweeperScoreboard(model)
+    val minefieldView = new MinesweeperView(model, scoreboard)
     
     val view = new BoxPanel(Orientation.Vertical) {
       contents ++ List(scoreboard, minefieldView)
     }
-    // Make the minefield model update the views when it changes
-    mineField.addObserver(scoreboard)
-    mineField.addObserver(minefieldView)
+    // Make the Minesweeper model update the views when it changes
+    model.addObserver(scoreboard)
+    model.addObserver(minefieldView)
     
     val frame = new Frame() {
-      visible=true
       contents = view
       title = "Minesweeper"
       reactions += {
         case WindowClosing(e) => System.exit(0)
       }
+      menuBar = new MinesweeperMenu(model)
+      visible=true
+      
     }
-    println(mineField)
   }
+}
+
+/**
+* Provides menu options to the player, including choices for changing the
+* difficulty and viewing high scores
+*/
+class MinesweeperMenu(field:Minesweeper) extends MenuBar {
+  import Minesweeper.Difficulty._
+  contents ++
+    List(
+      new Menu("New Game") {
+        contents += new MenuItem( Action("Beginner") { /*field.difficulty = Beginner*/ } )
+        contents += new MenuItem( Action("Intermediate") { /*field.difficulty = Intermediate*/ } )
+        contents += new MenuItem( Action("Expert") { /*field.difficulty = Expert*/ } )
+        contents += new MenuItem( Action("Custom") { Unit/* Launch dialog for custom*/ } )
+      },
+      new Menu("High scores") {
+        contents += new MenuItem( Action("View High Scores") { Unit } )
+      }
+    )
 }
 
 
@@ -65,40 +86,39 @@ object Minesweeper {
 * * A display showing how many seconds have elapsed
 * * A button with a friendly smiley face button reflecting state of game, as well
 *   as serving as a reset button
-* * A counter showing how many flags have been placed (how many mines are )
+* * A counter showing how many flags have been placed (how many mines are remaining)
 */
-class MinefieldScoreboard(field:Minefield) extends FlowPanel with Observer {
+class MinesweeperScoreboard(field:Minesweeper) extends FlowPanel with Observer {
   import scala.swing._
   import javax.swing.ImageIcon
   import java.awt.image.BufferedImage
   import javax.swing.{Timer}
   import java.awt.event.{ActionListener,ActionEvent}
   
-  val deadIcon = new ImageIcon(MinefieldView.sad)
-  val winIcon = new ImageIcon(MinefieldView.cool)
-  val defaultIcon = new ImageIcon(MinefieldView.happy)
-  val mousePressedIcon = new ImageIcon(MinefieldView.excited)
+  val deadIcon = new ImageIcon(MinesweeperView.sad)
+  val winIcon = new ImageIcon(MinesweeperView.cool)
+  val defaultIcon = new ImageIcon(MinesweeperView.happy)
+  val mousePressedIcon = new ImageIcon(MinesweeperView.excited)
   
-  
-  var seconds = 0
+  var elapsedSeconds = 0
   
   // Handles updating the timer
   val timerTask = new ActionListener() {
     override def actionPerformed(evt:ActionEvent):Unit = {
-      seconds += 1
-      timerLabel.text = seconds.toString
+      elapsedSeconds += 1
+      timerLabel.text = elapsedSeconds.toString
     }
   }
   val timer = new Timer(1000, timerTask)
-  val timerLabel:Label = new Label(seconds.toString)
+  val timerLabel:Label = new Label(elapsedSeconds.toString)
   
   // Resets both the board and the timer
   val reset:Button = new Button() {
     action = new Action("") {
-      val scoreboard = MinefieldScoreboard.this
+      val scoreboard = MinesweeperScoreboard.this
       override def apply():Unit = {
         field.reset()
-          scoreboard.seconds = 0
+          scoreboard.elapsedSeconds = 0
         scoreboard.timerLabel.text = "0"
         timer.restart
       }
@@ -111,12 +131,12 @@ class MinefieldScoreboard(field:Minefield) extends FlowPanel with Observer {
   // This scoreboard consists of the label showing time elapsed, the reset/smiley face
   // icon, and the number of flags that have been placed
   contents ++ List(timerLabel, reset, numFlags)
-  
-  
-  
+
+  // While mouse is pressed, the smiley face becomes an excited face
   def mousePressed():Unit = { reset.icon = mousePressedIcon; Unit }
   // def mouseReleased():Unit = {reset.icon = defaultIcon; Unit }
   
+  // Model has changed, ensure that all views match.
   override def update(o:Observable, arg:Any):Unit = {
     numFlags.text = field.numFlags().toString
     if (field.gameOver) { timer.stop }
@@ -131,8 +151,6 @@ class MinefieldScoreboard(field:Minefield) extends FlowPanel with Observer {
         defaultIcon
       }
   }
-  
-  
   timer.start
 }
 object TextPlacer {
@@ -201,7 +219,7 @@ object TextPlacer {
 }
 
 
-object MinefieldView {
+object MinesweeperView {
   import java.awt.image.BufferedImage
   import javax.imageio.ImageIO
   import java.io.File
@@ -214,7 +232,8 @@ object MinefieldView {
   val sad:BufferedImage = ImageIO.read(new File(iconHome + "sad.png"))
 }
 
-class MinefieldView(field:Minefield, scoreboard:MinefieldScoreboard) extends Panel with Observer {
+
+class MinesweeperView(field:Minesweeper, scoreboard:MinesweeperScoreboard) extends Panel with Observer {
   import Minestatus._
   import ExplorationStatus._
   import scala.swing.event.{MouseDragged,MousePressed,MouseReleased}
@@ -226,7 +245,7 @@ class MinefieldView(field:Minefield, scoreboard:MinefieldScoreboard) extends Pan
   import java.awt.event.InputEvent
 
   
-  val squareSize = MinefieldView.flag.getWidth()
+  val squareSize = MinesweeperView.flag.getWidth()
   val numRows = field.numRows()
   val numCols = field.numCols()
   val mines = field.mineStatus()
@@ -456,7 +475,7 @@ class MinefieldView(field:Minefield, scoreboard:MinefieldScoreboard) extends Pan
     def drawMine(x:Int, y:Int):Unit = {
       g.setColor(Color.RED)
       val bounds = rect(x,y)
-      drawIcon(bounds, MinefieldView.bomb)
+      drawIcon(bounds, MinesweeperView.bomb)
     }
     
     
@@ -493,7 +512,7 @@ class MinefieldView(field:Minefield, scoreboard:MinefieldScoreboard) extends Pan
       val bounds = rect(x,y)
       val cx = bounds.x + bounds.width/2
       val cy = bounds.y + bounds.height/2
-      val icon = MinefieldView.flag
+      val icon = MinesweeperView.flag
       
       drawIcon(bounds, icon)
     }
@@ -548,9 +567,10 @@ object ExplorationStatus extends Enumeration {
 }
 
 
-class Minefield(width:Int, height:Int, numFlags:Int) extends Observable {
+class Minesweeper(width:Int, height:Int, numFlags:Int) extends Observable {
   import Minestatus._
   import ExplorationStatus._
+  import Minesweeper.Difficulty
   private val random = new Random()
   
   type Coord = Tuple2[Int,Int]
@@ -560,7 +580,6 @@ class Minefield(width:Int, height:Int, numFlags:Int) extends Observable {
   private val adjacent8Directions = (for (x<-moves; y<-moves) yield(x,y)).filter(x=>x!=(0,0))
   
   def adjacentCoordinates(x:Int, y:Int) = adjacent8Directions.map(loc=>(x+loc._1, y+loc._2)).filter(!outOfBounds(_))
-  
     
   private var numFlagsRemaining:Int = numFlags
   
@@ -617,7 +636,6 @@ class Minefield(width:Int, height:Int, numFlags:Int) extends Observable {
  
   def numRows() = height
   def numCols() = width
-  
   
   private var dead = false
   def isDead() = dead
