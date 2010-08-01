@@ -338,8 +338,15 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
   
   val unexploredColor = Color.BLUE
   val exploredColor = Color.GRAY.brighter()
-  val gridLineColor = Color.WHITE
+  val gridLineColor = Color.BLACK
+  val highlightColor = Color.GRAY
   
+  val purple = new Color(160,32,240)
+  val maroon = new Color(176,48,96)
+  val turquoise = new Color(0,206,209)
+  
+  val numberColorMap = Map(1->Color.BLUE, 2->Color.GREEN.darker(), 3->Color.RED,
+    4->purple, 5->maroon, 6->turquoise,7->Color.BLACK,8->Color.GRAY.darker())
   
   var middleDown = false
   var middlePoint:Tuple2[Int,Int] = (0,0)
@@ -406,7 +413,6 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
     
     middleDown = false
     leftDown = false
-
     
     repaint()
   }
@@ -486,7 +492,7 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
     val gridWidth = width / numCols
     val gridHeight = height / numRows
     
-    val numberColorMap = Map(1->Color.BLUE, 2->Color.GREEN.darker(), 3->Color.RED, 4->Color.BLACK)
+    
     
     // the y locs of row i are at i and i + 1.  Similarly for column
     val rowGridLines:List[Int] = (0 until numRows + 1).toList.map(map(_, 0, numRows, 0, height-1).asInstanceOf[Int])
@@ -530,14 +536,37 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
       
 
     def drawUnexplored(x:Int, y:Int):Unit = {
-      if (toColorDifferently.contains(x,y)) {
-        g.setColor(diffColor)
+      val pressedIn = toColorDifferently.contains(x,y)
+      val normalColor = Color.GREEN.darker.darker
+      if (pressedIn) {
+        g.setColor(normalColor.darker)
       }
       else {
-        g.setColor(unexploredColor)
+        g.setColor(normalColor)
       }
       val bounds = rect(x,y)
       g.fillRect(bounds.x, bounds.y, bounds.width, bounds.height)
+
+      // If pressed in, draw additional black / gray 
+      val pressedWidth = if (pressedIn) 1 else 0
+      
+      g.setColor(Color.black)
+      // Vertical left side
+      g.fillRect(bounds.x, bounds.y, pressedWidth, bounds.height)
+      // Horizontal top
+      g.fillRect(bounds.x, bounds.y, bounds.width, pressedWidth)
+      
+      
+      // To make the grid appear 3D, make the square have a highlight at top and left edge
+      g.setColor(highlightColor)
+      // Upper left
+      val (x1, y1) = (bounds.x+pressedWidth+1, bounds.y+pressedWidth+1)
+      // lower right
+      val (x2, y2) = (bounds.x+bounds.width, bounds.y+bounds.height)
+      
+      g.drawLine(x1, y1, x2, y1)
+      g.drawLine(x1, y1, x1, y2)
+      
     }
     
     // Draw a buffered image within the given bounds.  Used
@@ -692,9 +721,6 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
   import Minesweeper.Difficulty
   private val random = new Random()
   
-  
-  
-  
   type Coord = Tuple2[Int,Int]
   
   // Can either move forward, stay put, or move back
@@ -747,6 +773,9 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
   
   private var field:Array[Array[ExplorationStatus.Value]] = initField()
   
+  // User cannot die on first click.  
+  var firstClick = true
+  
   def explorationStatus(x:Int, y:Int) = field(y)(x)
   
   def isExplored(x:Int, y:Int) = explorationStatus(x,y) == ExplorationStatus.Explored
@@ -768,6 +797,7 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
   }
 
   def reset() {
+    firstClick = true
     dead = false
     won = false
     numFlagsRemaining = numFlags
@@ -776,6 +806,28 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
     field = initField()
     adjacentCounts = calculateNumAdjacentMines()
     changed()
+  }
+
+  /**
+  * On first click, user cannot die.  So if where they click would cause them
+  * to die, we randomly move the mine and recalculate the numbers
+  */
+  private def moveMineRandomly(x:Int, y:Int):Unit = {
+    var foundLoc = false
+    while (!foundLoc) {
+      val row = random.nextInt(numRows)
+      val col = random.nextInt(numCols)
+      
+      // Must be an empty square
+      if (!isMine(col, row)) {
+        foundLoc = true
+        mines(y)(x) = Minestatus.Safe
+        mines(row)(col)  = Minestatus.Dangerous
+        // Recalculate all the adjacencies
+        adjacentCounts = calculateNumAdjacentMines()
+      }
+    }
+    Unit
   }
 
   private def calculateNumAdjacentMines():Array[Array[Int]] = {
@@ -945,11 +997,22 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
       return Unit
     }
     
-    // If they clicked on a mine, it's game over
+    // If they clicked on a mine, it's game over, unless it's the first click
     if (isMine(x,y)) {
-      lose(x,y)
-      changed()
+      if (firstClick) {
+        println("Moving mine.")
+        moveMineRandomly(x,y)
+        println(this.toString)
+        expand(x,y)
+      }
+      else {
+        lose(x,y)
+        changed()
+      }
     }
+    
+    firstClick = false
+    
     // Expands a square with zero adjacent mines; can cause a cascading effect
     // by recursively exploring all the adjacent zero mine squares
     def expandZeroSquare(): Unit = {
