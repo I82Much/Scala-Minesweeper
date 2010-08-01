@@ -59,7 +59,7 @@ object Minesweeper {
       reactions += {
         case WindowClosing(e) => System.exit(0)
       }
-      menuBar = new MinesweeperMenu(model)
+      menuBar = new MinesweeperMenu(model, minefieldView)
       visible=true
       
       def update(x:Observable, y:Any):Unit = {
@@ -140,9 +140,9 @@ object Minesweeper {
 * Provides menu options to the player, including choices for changing the
 * difficulty and viewing high scores
 */
-class MinesweeperMenu(field:MinesweeperModel) extends MenuBar {
+class MinesweeperMenu(field:MinesweeperModel, view:MinesweeperView) extends MenuBar {
   import Minesweeper.Difficulty._
-  
+  import javax.swing.JColorChooser
   def setDifficulty(diff:Minesweeper.Difficulty):Unit = {
     field.numRows = diff.numRows
     field.numColumns = diff.numCols
@@ -160,6 +160,15 @@ class MinesweeperMenu(field:MinesweeperModel) extends MenuBar {
       },
       new Menu("High scores") {
         contents += new MenuItem( Action("View High Scores") { Unit } )
+      },
+      new Menu("Customize") {
+        contents += new MenuItem( Action("Change Background Color") { 
+          val color = JColorChooser.showDialog(null, "Pick background color", view.unexploredColor)
+          if (color != null) {
+            view.unexploredColor = color
+            view.repaint
+          }
+        } )
       }
     )
 }
@@ -300,7 +309,10 @@ object MinesweeperView {
   import java.io.File
   val iconHome = "icons/"
   val flag:BufferedImage = ImageIO.read(new File(iconHome + "red_flag_32.png"))
+  
   val bomb:BufferedImage = ImageIO.read(new File(iconHome + "bomb_128.png"))
+  val flower:BufferedImage = ImageIO.read(new File(iconHome + "Sunflower.png"))
+  
   val happy:BufferedImage = ImageIO.read(new File(iconHome + "happy.png"))
   val excited:BufferedImage = ImageIO.read(new File(iconHome + "ooh.png"))
   val cool:BufferedImage = ImageIO.read(new File(iconHome + "cool.png"))
@@ -331,6 +343,7 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
   val squareSize = 20
   var numRows = field.numRows
   var numCols = field.numColumns
+  var useFlower:Boolean = true
 
   def repack():Unit = {
     preferredSize = new Dimension(squareSize * field.numColumns, squareSize * field.numRows)
@@ -338,7 +351,7 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
     maximumSize = preferredSize
   }
   
-  val unexploredColor = Color.BLUE
+  var unexploredColor = Color.BLUE
   val exploredColor = Color.GRAY.brighter()
   val gridLineColor = Color.BLACK
   val highlightColor = Color.GRAY
@@ -535,17 +548,17 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
 
     def drawUnexplored(x:Int, y:Int):Unit = {
       val pressedIn = pushedIn.contains(x,y)
-      val normalColor = Color.GREEN.darker.darker
       if (pressedIn) {
-        g.setColor(normalColor.darker)
+        g.setColor(unexploredColor.darker)
       }
       else {
-        g.setColor(normalColor)
+        g.setColor(unexploredColor)
       }
       val bounds = rect(x,y)
       g.fillRect(bounds.x, bounds.y, bounds.width, bounds.height)
 
-      // If pressed in, draw additional black / gray 
+      // If pressed in, draw additional black shadow in left and top side
+      // of square
       val pressedWidth = if (pressedIn) 1 else 0
       
       g.setColor(Color.black)
@@ -585,7 +598,12 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
     def drawMine(x:Int, y:Int):Unit = {
       g.setColor(Color.RED)
       val bounds = rect(x,y)
-      drawIcon(bounds, MinesweeperView.bomb)
+      if (useFlower) {
+        drawIcon(bounds, MinesweeperView.flower)
+      }
+      else {
+        drawIcon(bounds, MinesweeperView.bomb)
+      }
     }
     def drawExplored(x:Int, y:Int):Unit = {
       
@@ -662,7 +680,6 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
   repack()
 }
 
-
 object Minestatus extends Enumeration {
   val Safe = Value("Safe")
   val Dangerous = Value("Dangerous")
@@ -737,9 +754,7 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
   }
   val timer = new Timer(1000, timerTask)
   
-  
-  
-  
+    
   // Can either move forward, stay put, or move back
   private val moves = List(1,0,-1)
   private val adjacent8Directions = (for (x<-moves; y<-moves) yield(x,y)).filter(x=>x!=(0,0))

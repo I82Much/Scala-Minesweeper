@@ -16,3 +16,6 @@ http://www.iconfinder.com/icondetails/12863/32/smiley_surprised_icon
 http://www.iconfinder.com/icondetails/12858/32/happy_smiley_icon
 http://www.iconfinder.com/icondetails/12862/32/sad_smiley_icon
 http://www.iconfinder.com/icondetails/12857/32/cool_smiley_icon
+
+#sunflower
+http://www.iconfinder.com/icondetails/43208/128/flower_plant_sunflower_icon
