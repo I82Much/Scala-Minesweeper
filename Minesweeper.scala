@@ -34,7 +34,7 @@ object Minesweeper {
   // Expert: 30 × 16 field with 99 mines
   // Custom: Any values from 8 × 8 or 9 × 9 to 30 × 24 field, with 10 to 667 mines
   // [the maximum number of mines allowed for a field of size A × B is [(A − 1) × (B − 1)].
-  case class Difficulty(numRows:Int, numCols:Int, numFlags:Int) {}
+  case class Difficulty(numRows:Int, numCols:Int, numMines:Int) {}
   object Beginner extends Difficulty(8,8,10) {}
   object Intermediate extends Difficulty(16,16,40) {}
   object Expert extends Difficulty(16,30,99) {}
@@ -43,7 +43,7 @@ object Minesweeper {
 
     val difficulty = Intermediate
     
-    val model = new MinesweeperModel(difficulty.numCols, difficulty.numRows, difficulty.numFlags)
+    val model = new MinesweeperModel(difficulty.numCols, difficulty.numRows, difficulty.numMines)
     
     val scoreboard = new MinesweeperScoreboard(model)
     val minefieldView = new MinesweeperView(model, scoreboard)
@@ -51,11 +51,9 @@ object Minesweeper {
     val view = new BoxPanel(Orientation.Vertical) {
       contents ++ List(scoreboard, minefieldView)
     }
-    // Make the Minesweeper model update the views when it changes
-    model.addObserver(scoreboard)
-    model.addObserver(minefieldView)
     
-    val frame = new Frame() {
+    
+    val frame = new Frame() with Observer {
       contents = view
       title = "Minesweeper"
       reactions += {
@@ -63,7 +61,18 @@ object Minesweeper {
       }
       menuBar = new MinesweeperMenu(model)
       visible=true
+      
+      def update(x:Observable, y:Any):Unit = {
+        pack()
+      }
     }
+    
+    // Make the Minesweeper model update the views when it changes
+    // Order is important - we want the minefield view to be updated before
+    // the frame for resizing purposes
+    model.addObserver(frame)
+    model.addObserver(scoreboard)
+    model.addObserver(minefieldView)
   }
 }
 
@@ -133,12 +142,20 @@ object Minesweeper {
 */
 class MinesweeperMenu(field:MinesweeperModel) extends MenuBar {
   import Minesweeper.Difficulty._
+  
+  def setDifficulty(diff:Minesweeper.Difficulty):Unit = {
+    field.numRows = diff.numRows
+    field.numColumns = diff.numCols
+    field.numMines = diff.numMines
+    field.reset()
+  }
+  
   contents ++
     List(
       new Menu("New Game") {
-        contents += new MenuItem( Action("Beginner") { /*field.difficulty = Beginner*/ } )
-        contents += new MenuItem( Action("Intermediate") { /*field.difficulty = Intermediate*/ } )
-        contents += new MenuItem( Action("Expert") { /*field.difficulty = Expert*/ } )
+        contents += new MenuItem( Action("Beginner") { setDifficulty(Minesweeper.Beginner) } )
+        contents += new MenuItem( Action("Intermediate") { setDifficulty(Minesweeper.Intermediate) } )
+        contents += new MenuItem( Action("Expert") { setDifficulty(Minesweeper.Expert) } )
         contents += new MenuItem( Action("Custom") { Unit/* Launch dialog for custom*/ } )
       },
       new Menu("High scores") {
@@ -167,29 +184,11 @@ class MinesweeperScoreboard(field:MinesweeperModel) extends FlowPanel with Obser
   val defaultIcon = new ImageIcon(MinesweeperView.happy)
   val mousePressedIcon = new ImageIcon(MinesweeperView.excited)
   
-  var elapsedSeconds = 0
-  
-  // Handles updating the timer
-  val timerTask = new ActionListener() {
-    override def actionPerformed(evt:ActionEvent):Unit = {
-      elapsedSeconds += 1
-      timerLabel.text = elapsedSeconds.toString
-    }
-  }
-  val timer = new Timer(1000, timerTask)
-  val timerLabel:Label = new Label(elapsedSeconds.toString)
+  val timerLabel:Label = new Label("0")
   
   // Resets both the board and the timer
   val reset:Button = new Button() {
-    action = new Action("") {
-      val scoreboard = MinesweeperScoreboard.this
-      override def apply():Unit = {
-        field.reset()
-          scoreboard.elapsedSeconds = 0
-        scoreboard.timerLabel.text = "0"
-        timer.restart
-      }
-    }
+    action = Action("") { field.reset() }
     icon = defaultIcon
   }
   
@@ -205,8 +204,8 @@ class MinesweeperScoreboard(field:MinesweeperModel) extends FlowPanel with Obser
   
   // Model has changed, ensure that all views match.
   override def update(o:Observable, arg:Any):Unit = {
-    numFlags.text = field.numFlags().toString
-    if (field.gameOver) { timer.stop }
+    numFlags.text = field.numFlags.toString
+    timerLabel.text = field.elapsedSeconds.toString
     reset.icon = 
       if (field.isDead) {
         deadIcon
@@ -218,7 +217,6 @@ class MinesweeperScoreboard(field:MinesweeperModel) extends FlowPanel with Obser
         defaultIcon
       }
   }
-  timer.start
 }
 
 /**
@@ -331,10 +329,14 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
 
   
   val squareSize = 20
-  val numRows = field.numRows()
-  val numCols = field.numCols()
-  val mines = field.mineStatus()
-  preferredSize = new Dimension(squareSize * field.numCols(), squareSize * field.numRows())
+  var numRows = field.numRows
+  var numCols = field.numColumns
+
+  def repack():Unit = {
+    preferredSize = new Dimension(squareSize * field.numColumns, squareSize * field.numRows)
+    minimumSize = preferredSize
+    maximumSize = preferredSize
+  }
   
   val unexploredColor = Color.BLUE
   val exploredColor = Color.GRAY.brighter()
@@ -359,6 +361,10 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
   listenTo(mouse.clicks, mouse.moves)
   
   override def update(o:Observable, arg:Any):Unit = {
+    numRows = field.numRows
+    numCols = field.numColumns
+    repack()
+    
     repaint()
   }
   
@@ -397,7 +403,7 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
     
     val colRow = pointToColumnRow(point)
     
-    if (leftDown && sameSquare(leftPoint, (point.x, point.y))) {
+    if (leftDown /*&& sameSquare(leftPoint, (point.x, point.y))*/) {
       field.expand(colRow._1, colRow._2)
     }
     
@@ -509,16 +515,15 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
     // Don't color these differently
     val ignored = List(ExplorationStatus.Flagged, ExplorationStatus.Question)
     
-    val toColorDifferently:List[Tuple2[Int,Int]] = 
+    val pushedIn:List[Tuple2[Int,Int]] = 
       if (middleDown) {
         val center = pointToColumnRow(middlePoint._1, middlePoint._2)
         val adjacentCoords = (center :: field.adjacentCoordinates(center._1, center._2))
         adjacentCoords.filter(loc => field.explorationStatus(loc._1,loc._2) == ExplorationStatus.Unexplored)
       }
-      // Show the currently pressed square as a diff color, as long as the mouse
-      // resides within it
-      else if (leftDown && sameSquare(leftPoint, curPoint) && !ignored.contains(curPoint)) {
-        List(pointToColumnRow(leftPoint._1, leftPoint._2))
+      // Show the currently pressed square as pushedIn
+      else if (leftDown /*&& sameSquare(leftPoint, curPoint)*/ && !ignored.contains(curPoint)) {
+        List(pointToColumnRow(curPoint._1, curPoint._2))
       }
       else {
         Nil
@@ -526,17 +531,10 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
       
 
     val center = pointToColumnRow(curPoint._1, curPoint._2)
-    val diffColor:Color = 
-      if (middleDown && !field.shouldExpandAdjacent(center._1,center._2)) {
-        Color.RED
-      }
-      else {
-        Color.ORANGE
-      }
-      
+    
 
     def drawUnexplored(x:Int, y:Int):Unit = {
-      val pressedIn = toColorDifferently.contains(x,y)
+      val pressedIn = pushedIn.contains(x,y)
       val normalColor = Color.GREEN.darker.darker
       if (pressedIn) {
         g.setColor(normalColor.darker)
@@ -589,9 +587,6 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
       val bounds = rect(x,y)
       drawIcon(bounds, MinesweeperView.bomb)
     }
-    
-    
-    
     def drawExplored(x:Int, y:Int):Unit = {
       
       val fillColor = 
@@ -637,6 +632,7 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
       TextPlacer.drawText("?", AnchorPoint.Center, g, cx, cy)
     }
 
+    // Draw the square with the correct type
     for (x <- 0 until numCols) {
       for (y <- 0 until numRows) {
         field.explorationStatus(x,y) match {
@@ -663,6 +659,7 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
     }
   }
   
+  repack()
 }
 
 
@@ -719,9 +716,29 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
   import Minestatus._
   import ExplorationStatus._
   import Minesweeper.Difficulty
+  import javax.swing.{Timer}
+  import java.awt.event.{ActionListener,ActionEvent}
+  
   private val random = new Random()
   
+  var numRows = height
+  var numColumns = width
+  var numMines = numFlags
+  
   type Coord = Tuple2[Int,Int]
+
+  var elapsedSeconds = 0
+  
+  val timerTask = new ActionListener() {
+    override def actionPerformed(evt:ActionEvent):Unit = {
+      elapsedSeconds += 1
+      changed()
+    }
+  }
+  val timer = new Timer(1000, timerTask)
+  
+  
+  
   
   // Can either move forward, stay put, or move back
   private val moves = List(1,0,-1)
@@ -729,7 +746,7 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
   
   def adjacentCoordinates(x:Int, y:Int) = adjacent8Directions.map(loc=>(x+loc._1, y+loc._2)).filter(!outOfBounds(_))
     
-  private var numFlagsRemaining:Int = numFlags
+  private var numFlagsRemaining:Int = numMines
   
   // Calculates random (x,y) pairs in the given range
   private def pickRandomCoordinates(numCoords:Int, minX:Int, minY:Int, maxX:Int, maxY:Int):List[Coord] = {
@@ -754,20 +771,20 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
   }
 
   private def calculateMineLocations():List[Coord] = {
-    pickRandomCoordinates(numFlags, 0, 0, width, height)
+    pickRandomCoordinates(numMines, 0, 0, numColumns, numRows)
   }
   
   private var mineLocs = calculateMineLocations()
   
   private def fromLocations(coords:List[Coord]):Array[Array[Minestatus.Value]] = {
     // 2d array of Minestatus
-    val mines = Array.fill(height,width)(Minestatus.Safe)
+    val mines = Array.fill(numRows,numColumns)(Minestatus.Safe)
     // we have x,y, change to row, column
     coords.foreach(x => mines(x._2)(x._1) = Minestatus.Dangerous)
     mines
   }
   
-  private def initField() = { Array.fill(height,width)(ExplorationStatus.Unexplored)}
+  private def initField() = { Array.fill(numRows,numColumns)(ExplorationStatus.Unexplored)}
   
   private var mines:Array[Array[Minestatus.Value]] = fromLocations(mineLocs)
   
@@ -784,9 +801,6 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
   def isUnexplored(x:Int, y:Int) = explorationStatus(x,y) == ExplorationStatus.Unexplored
   
   def mineStatus() = mines
- 
-  def numRows() = height
-  def numCols() = width
   
   private var dead = false
   def isDead() = dead
@@ -797,10 +811,12 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
   }
 
   def reset() {
+    timer.stop
+    elapsedSeconds = 0
     firstClick = true
     dead = false
     won = false
-    numFlagsRemaining = numFlags
+    numFlagsRemaining = numMines
     mineLocs = calculateMineLocations()
     mines = fromLocations(mineLocs)
     field = initField()
@@ -816,7 +832,7 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
     var foundLoc = false
     while (!foundLoc) {
       val row = random.nextInt(numRows)
-      val col = random.nextInt(numCols)
+      val col = random.nextInt(numColumns)
       
       // Must be an empty square
       if (!isMine(col, row)) {
@@ -836,7 +852,7 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
     // on the board, and check how many of those are mines.
     // To avoid special case logic at edges and corners, we extend the board
     // one square in each direction
-    val scratchBoard = Array.fill(height+2,width+2)(Minestatus.Safe)
+    val scratchBoard = Array.fill(numRows+2,numColumns+2)(Minestatus.Safe)
     
     // Copy the interior section of the board
     var counter = 0
@@ -848,9 +864,9 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
     }
     
     // Now loop through and count up
-    val answers = Array.fill(height,width)(0)
-    for (row <- 0 until height) {
-      for (col <- 0 until width) {
+    val answers = Array.fill(numRows,numColumns)(0)
+    for (row <- 0 until numRows) {
+      for (col <- 0 until numColumns) {
         var counter = 0
         for ((x,y) <- adjacent8Directions) {
           // Need to add 1 to row and col to make up for the extra space
@@ -891,7 +907,7 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
   }
   
   private def outOfBounds(x:Int, y:Int):Boolean = {
-    x < 0 || x >= numCols ||
+    x < 0 || x >= numColumns ||
     y < 0 || y >= numRows
   }
   
@@ -958,6 +974,7 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
     dead = true
     fillBoard(ExplorationStatus.Explored)
     mines(y)(x) = Minestatus.Detonated
+    timer.stop
   }
   
   private def win(): Unit = {
@@ -966,7 +983,7 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
   }
   
   private def fillBoard(status:ExplorationStatus.Value):Unit = {
-    field = Array.fill(numRows, numCols)(status)
+    field = Array.fill(numRows, numColumns)(status)
   }
   
   /**
@@ -991,6 +1008,9 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
 
   // TODO: Refactor this
   def expand(x:Int, y:Int):Unit = {
+    if (firstClick) {
+      timer.start
+    }
     // If they click on a ? or Flag, ignore it
     val ignored = List(ExplorationStatus.Flagged, ExplorationStatus.Question)
     if (ignored.contains(explorationStatus(x,y))) {
@@ -1077,7 +1097,7 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
     val numQuestion = explorationStatuses.count(_ == ExplorationStatus.Question)
     val numUnexplored = explorationStatuses.count(_ == ExplorationStatus.Unexplored)
     
-    numQuestion == 0 && numUnexplored + numFlagged == numFlags
+    numQuestion == 0 && numUnexplored + numFlagged == numMines
   }
   
   def hasWon():Boolean = won
