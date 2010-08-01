@@ -415,30 +415,25 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
     // Determine if both left and right buttons pressed: http://www.daniweb.com/forums/thread123929.html
     val onMask = InputEvent.BUTTON1_DOWN_MASK & InputEvent.BUTTON3_DOWN_MASK
     val offMask = InputEvent.BUTTON1_DOWN_MASK | InputEvent.BUTTON3_DOWN_MASK
-    if ( (modifiers & InputEvent.BUTTON1_DOWN_MASK) != 0) {
-      println("Left down")
-      leftDown = true
-      leftPoint = (point.x,point.y)
-      curPoint = leftPoint
-      repaint()
-    }
-    if ((modifiers & InputEvent.BUTTON2_DOWN_MASK) != 0) {
-      println("2 down")
-    }
-    if ((modifiers & InputEvent.BUTTON3_DOWN_MASK) != 0) {
-      println("3 down")
-    }
+    val bothMask = InputEvent.BUTTON1_DOWN_MASK | InputEvent.BUTTON3_DOWN_MASK
     
-    
-    if ( (modifiers & (onMask | offMask)) == onMask) {
+    if ( (modifiers & bothMask) == bothMask) {
+    // if ( modifiers & bothMask != 0 ) {
       middleDown = true
       middlePoint = (point.x, point.y)
       println(middlePoint)
       repaint()
     }
     
+    else if ( (modifiers & InputEvent.BUTTON1_DOWN_MASK) != 0) {
+      println("Left down")
+      leftDown = true
+      leftPoint = (point.x,point.y)
+      curPoint = leftPoint
+      repaint()
+    }
     
-    if (triggersPopup) {
+    else if (triggersPopup) {
       field.toggleFlag(colRow._1, colRow._2)
     }
     
