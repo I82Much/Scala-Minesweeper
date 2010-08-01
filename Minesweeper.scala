@@ -201,7 +201,7 @@ class MinesweeperScoreboard(field:MinesweeperModel) extends FlowPanel with Obser
 
   // While mouse is pressed, the smiley face becomes an excited face
   def mousePressed():Unit = { reset.icon = mousePressedIcon; Unit }
-  // def mouseReleased():Unit = {reset.icon = defaultIcon; Unit }
+  def mouseReleased():Unit = {reset.icon = defaultIcon; Unit }
   
   // Model has changed, ensure that all views match.
   override def update(o:Observable, arg:Any):Unit = {
@@ -330,7 +330,7 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
   import java.awt.event.InputEvent
 
   
-  val squareSize = MinesweeperView.flag.getWidth()
+  val squareSize = 20
   val numRows = field.numRows()
   val numCols = field.numCols()
   val mines = field.mineStatus()
@@ -383,7 +383,10 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
   }
   
   def mouseReleased(point:Point, modifiers:Int, clicks:Int, triggersPopup:Boolean):Unit = {
+    
+    
     if (field.gameOver()) { return Unit }
+    scoreboard.mouseReleased
     
     val colRow = pointToColumnRow(point)
     
@@ -404,11 +407,16 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
     middleDown = false
     leftDown = false
 
+    
     repaint()
   }
   
   def handleMousePress(point:Point, modifiers:Int, clicks:Int, triggersPopup:Boolean):Unit = {
     if (field.gameOver()) { return Unit }
+    
+    // Just a fun little touch, when mouse is pressed, change the smiley 
+    // face icon in the scoreboard
+    scoreboard.mousePressed
     
     val colRow = pointToColumnRow(point)
     
@@ -437,9 +445,6 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
       field.toggleFlag(colRow._1, colRow._2)
     }
     
-    // Just a fun little touch, when mouse is pressed, change the smiley 
-    // face icon in the scoreboard
-    scoreboard.mousePressed
   }
 
   /**
