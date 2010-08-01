@@ -10,7 +10,7 @@ import swing._//{Frame,Panel,Button,BoxPanel,FlowPanel,Dimension,Orientation,Men
 import java.awt.Color
 import java.util.{Observable,Observer}
 import swing.event.{WindowClosing,MouseDragged,MousePressed,MouseReleased}
-
+import javax.swing.JApplet
 
 // TODO: Make sure they can't lose in first click by moving the mine and 
 // recalculating the board's adjacency matrix.
@@ -41,7 +41,7 @@ object Minesweeper {
   
   def main(args:Array[String]) {
 
-    val difficulty = Expert
+    val difficulty = Intermediate
     
     val model = new MinesweeperModel(difficulty.numCols, difficulty.numRows, difficulty.numFlags)
     
@@ -66,6 +66,66 @@ object Minesweeper {
     }
   }
 }
+
+
+// object Minesweeper {
+//   // http://en.wikipedia.org/wiki/Minesweeper_%28Windows%29
+//   // Beginner: 8 × 8 or 9 × 9 field with 10 mines
+//   // Intermediate: 16 × 16 field with 40 mines
+//   // Expert: 30 × 16 field with 99 mines
+//   // Custom: Any values from 8 × 8 or 9 × 9 to 30 × 24 field, with 10 to 667 mines
+//   // [the maximum number of mines allowed for a field of size A × B is [(A − 1) × (B − 1)].
+//   case class Difficulty(numRows:Int, numCols:Int, numFlags:Int) {}
+//   object Beginner extends Difficulty(8,8,10) {}
+//   object Intermediate extends Difficulty(16,16,40) {}
+//   object Expert extends Difficulty(16,30,99) {}
+//   
+// }
+// 
+// class MinesweeperApplet extends Applet {
+//   val difficulty = Minesweeper.Expert
+//   
+//   val model = new MinesweeperModel(difficulty.numCols, difficulty.numRows, difficulty.numFlags)
+//   
+//   val scoreboard = new MinesweeperScoreboard(model)
+//   val minefieldView = new MinesweeperView(model, scoreboard)
+//   
+//   val view = new BoxPanel(Orientation.Vertical) {
+//     contents ++ List(scoreboard, minefieldView)
+//   }
+//   
+//   val frame = new Frame() {
+//         contents = view
+//         title = "Minesweeper"
+//         reactions += {
+//           case WindowClosing(e) => System.exit(0)
+//         }
+//         menuBar = new MinesweeperMenu(model)
+//         visible=true
+//       }
+// 
+//   override def init() {
+//     
+//     // Make the Minesweeper model update the views when it changes
+//     model.addObserver(scoreboard)
+//     model.addObserver(minefieldView)
+//     
+//     
+//     
+//     
+//   }
+//   
+//   object ui extends UI {
+//     contents = view
+//     
+//     override def init() {}
+//     override def stop() {}
+//     
+//   }
+//   // ui = new UI() { contents = List(view) }
+// 
+//   
+// }
 
 /**
 * Provides menu options to the player, including choices for changing the
@@ -160,6 +220,13 @@ class MinesweeperScoreboard(field:MinesweeperModel) extends FlowPanel with Obser
   }
   timer.start
 }
+
+/**
+* Handles drawing strings such that certain parts of them are positioned
+* at a given x,y (in screen coordinates).  This makes it very easy to center
+* a piece of text at the center of the screen, for instance, and hides the
+* complications of calculating string bounds
+*/
 object TextPlacer {
   import java.awt.font.{TextLayout}
   import java.awt.{Font}
@@ -225,7 +292,10 @@ object TextPlacer {
   
 }
 
-
+/**
+* The Minesweeper view companion object holds references to the art assets 
+* needed to draw the game board and scoreboard.
+*/
 object MinesweeperView {
   import java.awt.image.BufferedImage
   import javax.imageio.ImageIO
@@ -239,7 +309,15 @@ object MinesweeperView {
   val sad:BufferedImage = ImageIO.read(new File(iconHome + "sad.png"))
 }
 
-
+/**
+* The MinesweeperView is actually a hybrid view/controller of the underlying
+* model.  It provides the grid board, as well as handles mouse events to 
+* determine what actions need to be taken to the model.  In MVC fashion,
+* the controller aspects modify the model, which notifies the view, which
+* then updates itself, rather than the view immediately updating as a result
+* of a mouse click, for instance.  This allows us to be sure that the view
+* that the player sees is consistent with that of the board.
+*/
 class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) extends Panel with Observer {
   import Minestatus._
   import ExplorationStatus._
@@ -571,7 +649,6 @@ object ExplorationStatus extends Enumeration {
   val Unexplored, Explored, Flagged, Question = Value
 }
 
-
 case class Vector2(rowOffset:Int, colOffset:Int) {
   def +(v:Vector2):Vector2 = {
     Vector2(rowOffset+v.rowOffset, colOffset + v.colOffset)
@@ -592,13 +669,23 @@ object Vector2 {
   val adjacent4 = List(north, east, south, west)
 }
 
-
 case class Coord2(row:Int, col:Int) {
   def +(v:Vector2):Coord2 = {
     Coord2(row + v.rowOffset, col + v.colOffset)
   }
 }
 
+abstract case class GameState() {}
+class Won extends GameState {}
+class InProgress extends GameState {}
+class Lost extends GameState {}
+
+
+/**
+* The heart of the whole Minesweeper game, this class handles
+* the board state, calculating the random locations of mines, determining
+* whether the player has won, lost, or is in progress
+*/
 class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
   import Minestatus._
   import ExplorationStatus._
