@@ -168,10 +168,20 @@ class MinesweeperMenu(field:MinesweeperModel, view:MinesweeperView) extends Menu
             view.unexploredColor = color
             view.repaint
           }
-        } )
+        })
+        
+        contents += new CheckMenuItem( "Use flowers instead of mines" ) {
+          action = Action("Use flowers instead of mines") {
+            view.useFlower = this.selected
+            view.repaint
+          }
+          selected = view.useFlower
+        } 
       }
     )
 }
+
+class HighScorePanel 
 
 
 /**
@@ -995,6 +1005,10 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
   private def win(): Unit = {
     won = true
     fillBoard(ExplorationStatus.Explored)
+    timer.stop
+    
+    // TODO: check for high score, prompt user for name if they have fastest time
+    
   }
   
   private def fillBoard(status:ExplorationStatus.Value):Unit = {
