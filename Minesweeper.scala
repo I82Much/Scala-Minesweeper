@@ -1,6 +1,5 @@
 import java.util.Random
 import scala.collection.mutable.ListBuffer
-//import javax.swing._
 import java.awt.Graphics
 import java.awt.Graphics2D
 import java.awt.Paint
@@ -12,17 +11,13 @@ import java.util.{Observable,Observer}
 import swing.event.{WindowClosing,MouseDragged,MousePressed,MouseReleased}
 import javax.swing.JApplet
 
-// TODO: Make sure they can't lose in first click by moving the mine and 
-// recalculating the board's adjacency matrix.
-// TODO: If they've misflagged a square and it leads to their death, make sure
-// you draw an X through the mine
-// TODO: Fix the array out of bound exceptions
+// TODO: fix the behavior of winning/losing.  Only when you die should
+// you ever see a mine.  Otherwise the flagged/non flagged should stay 
+// TODO: U
+// TODO: allow custom images for the mines
 // TODO: Create a class encapsulating the row, column stuff
 
-
-
-
-
+  
 /**
 * Contains the main menu entry point
 */
@@ -35,13 +30,14 @@ object Minesweeper {
   // Custom: Any values from 8 × 8 or 9 × 9 to 30 × 24 field, with 10 to 667 mines
   // [the maximum number of mines allowed for a field of size A × B is [(A − 1) × (B − 1)].
   case class Difficulty(numRows:Int, numCols:Int, numMines:Int) {}
+  object Trivial extends Difficulty(8,8,1) {}
   object Beginner extends Difficulty(8,8,10) {}
   object Intermediate extends Difficulty(16,16,40) {}
   object Expert extends Difficulty(16,30,99) {}
   
   def main(args:Array[String]) {
 
-    val difficulty = Intermediate
+    val difficulty = Trivial
     
     val model = new MinesweeperModel(difficulty.numCols, difficulty.numRows, difficulty.numMines)
     
@@ -76,65 +72,6 @@ object Minesweeper {
   }
 }
 
-
-// object Minesweeper {
-//   // http://en.wikipedia.org/wiki/Minesweeper_%28Windows%29
-//   // Beginner: 8 × 8 or 9 × 9 field with 10 mines
-//   // Intermediate: 16 × 16 field with 40 mines
-//   // Expert: 30 × 16 field with 99 mines
-//   // Custom: Any values from 8 × 8 or 9 × 9 to 30 × 24 field, with 10 to 667 mines
-//   // [the maximum number of mines allowed for a field of size A × B is [(A − 1) × (B − 1)].
-//   case class Difficulty(numRows:Int, numCols:Int, numFlags:Int) {}
-//   object Beginner extends Difficulty(8,8,10) {}
-//   object Intermediate extends Difficulty(16,16,40) {}
-//   object Expert extends Difficulty(16,30,99) {}
-//   
-// }
-// 
-// class MinesweeperApplet extends Applet {
-//   val difficulty = Minesweeper.Expert
-//   
-//   val model = new MinesweeperModel(difficulty.numCols, difficulty.numRows, difficulty.numFlags)
-//   
-//   val scoreboard = new MinesweeperScoreboard(model)
-//   val minefieldView = new MinesweeperView(model, scoreboard)
-//   
-//   val view = new BoxPanel(Orientation.Vertical) {
-//     contents ++ List(scoreboard, minefieldView)
-//   }
-//   
-//   val frame = new Frame() {
-//         contents = view
-//         title = "Minesweeper"
-//         reactions += {
-//           case WindowClosing(e) => System.exit(0)
-//         }
-//         menuBar = new MinesweeperMenu(model)
-//         visible=true
-//       }
-// 
-//   override def init() {
-//     
-//     // Make the Minesweeper model update the views when it changes
-//     model.addObserver(scoreboard)
-//     model.addObserver(minefieldView)
-//     
-//     
-//     
-//     
-//   }
-//   
-//   object ui extends UI {
-//     contents = view
-//     
-//     override def init() {}
-//     override def stop() {}
-//     
-//   }
-//   // ui = new UI() { contents = List(view) }
-// 
-//   
-// }
 
 /**
 * Provides menu options to the player, including choices for changing the
@@ -197,13 +134,17 @@ class MinesweeperScoreboard(field:MinesweeperModel) extends FlowPanel with Obser
   import java.awt.image.BufferedImage
   import javax.swing.{Timer}
   import java.awt.event.{ActionListener,ActionEvent}
+  import java.text.DecimalFormat
   
   val deadIcon = new ImageIcon(MinesweeperView.sad)
   val winIcon = new ImageIcon(MinesweeperView.cool)
   val defaultIcon = new ImageIcon(MinesweeperView.happy)
   val mousePressedIcon = new ImageIcon(MinesweeperView.excited)
   
-  val timerLabel:Label = new Label("0")
+  val remainingFlagsNumberFormat = new DecimalFormat("00")
+  val timeNumberFormat = new DecimalFormat("000")
+  
+  val timerLabel:Label = new Label(timeNumberFormat.format(0))
   
   // Resets both the board and the timer
   val reset:Button = new Button() {
@@ -211,7 +152,7 @@ class MinesweeperScoreboard(field:MinesweeperModel) extends FlowPanel with Obser
     icon = defaultIcon
   }
   
-  val numFlags:Label = new Label(field.numFlags.toString)
+  val numFlags:Label = new Label(remainingFlagsNumberFormat.format(field.numFlags))
   
   // This scoreboard consists of the label showing time elapsed, the reset/smiley face
   // icon, and the number of flags that have been placed
@@ -223,8 +164,8 @@ class MinesweeperScoreboard(field:MinesweeperModel) extends FlowPanel with Obser
   
   // Model has changed, ensure that all views match.
   override def update(o:Observable, arg:Any):Unit = {
-    numFlags.text = field.numFlags.toString
-    timerLabel.text = field.elapsedSeconds.toString
+    numFlags.text = remainingFlagsNumberFormat.format(field.numFlags)
+    timerLabel.text = timeNumberFormat.format(field.elapsedSeconds)
     reset.icon = 
       if (field.isDead) {
         deadIcon
@@ -353,7 +294,9 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
   val squareSize = 20
   var numRows = field.numRows
   var numCols = field.numColumns
-  var useFlower:Boolean = true
+  
+  // Should we display flowers instead of mines upon death
+  var useFlower:Boolean = false
 
   def repack():Unit = {
     preferredSize = new Dimension(squareSize * field.numColumns, squareSize * field.numRows)
@@ -426,19 +369,23 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
     
     val colRow = pointToColumnRow(point)
     
-    if (leftDown /*&& sameSquare(leftPoint, (point.x, point.y))*/) {
-      field.expand(colRow._1, colRow._2)
-    }
     
-    if (middleDown) {
-      val (x,y) = colRow
-      // We don't always expand adjacent, but only when player has unambiguously
-      // flagged the squares that he thinks are mines in the vicinity
-      if (field.shouldExpandAdjacent(x,y)) {
-        field.expandAdjacent(x,y)
+    
+    if (field.inBounds(colRow)) {
+    
+      if (middleDown) {
+        val (x,y) = colRow
+        // We don't always expand adjacent, but only when player has unambiguously
+        // flagged the squares that he thinks are mines in the vicinity
+        if (field.shouldExpandAdjacent(x,y)) {
+          field.expandAdjacent(x,y)
+        }
+      }
+      
+      else if (leftDown) {
+        field.expand(colRow._1, colRow._2)
       }
     }
-    
     
     middleDown = false
     leftDown = false
@@ -454,17 +401,16 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
     scoreboard.mousePressed
     
     val colRow = pointToColumnRow(point)
+    if (!field.inBounds(colRow)) { return Unit }
     
     // Determine if both left and right buttons pressed: http://www.daniweb.com/forums/thread123929.html
-    val onMask = InputEvent.BUTTON1_DOWN_MASK & InputEvent.BUTTON3_DOWN_MASK
-    val offMask = InputEvent.BUTTON1_DOWN_MASK | InputEvent.BUTTON3_DOWN_MASK
     val bothMask = InputEvent.BUTTON1_DOWN_MASK | InputEvent.BUTTON3_DOWN_MASK
     
+    // Both mice buttons are down, expand the adjacent 8 squares around
+    // center, when mouse released
     if ( (modifiers & bothMask) == bothMask) {
-    // if ( modifiers & bothMask != 0 ) {
       middleDown = true
       middlePoint = (point.x, point.y)
-      println(middlePoint)
       repaint()
     }
     
@@ -521,8 +467,6 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
     val gridWidth = width / numCols
     val gridHeight = height / numRows
     
-    
-    
     // the y locs of row i are at i and i + 1.  Similarly for column
     val rowGridLines:List[Int] = (0 until numRows + 1).toList.map(map(_, 0, numRows, 0, height-1).asInstanceOf[Int])
     val colGridLines:List[Int] = (0 until numCols + 1).toList.map(map(_, 0, numCols, 0, width-1).asInstanceOf[Int])
@@ -542,7 +486,7 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
       if (middleDown) {
         val center = pointToColumnRow(middlePoint._1, middlePoint._2)
         val adjacentCoords = (center :: field.adjacentCoordinates(center._1, center._2))
-        adjacentCoords.filter(loc => field.explorationStatus(loc._1,loc._2) == ExplorationStatus.Unexplored)
+        adjacentCoords.filter(loc => field.inBounds(loc) && field.explorationStatus(loc._1,loc._2) == ExplorationStatus.Unexplored)
       }
       // Show the currently pressed square as pushedIn
       else if (leftDown /*&& sameSquare(leftPoint, curPoint)*/ && !ignored.contains(curPoint)) {
@@ -651,6 +595,17 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
       
       drawIcon(bounds, icon)
     }
+    def drawMisflagged(x:Int, y:Int):Unit = {
+      drawFlag(x,y)
+      val bounds = rect(x,y)
+      // Draw an x through it
+      g.setColor(Color.RED)
+      val (x1, y1) = (bounds.x, bounds.y)
+      val (x2, y2) = (bounds.x + bounds.width, bounds.y + bounds.height)
+      
+      g.drawLine(x1,y1,x2,y2)
+      g.drawLine(x1,y2,x2,y1)
+    }
     def drawQuestion(x:Int, y:Int):Unit = {
       drawUnexplored(x,y)
       val bounds = rect(x,y)
@@ -668,6 +623,7 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
           case ExplorationStatus.Explored => drawExplored(x,y)
           case ExplorationStatus.Flagged => drawFlag(x,y)
           case ExplorationStatus.Question => drawQuestion(x,y)
+          case ExplorationStatus.Misflagged => drawMisflagged(x,y)
         }
       }
     }
@@ -699,7 +655,7 @@ object Minestatus extends Enumeration {
 
 object ExplorationStatus extends Enumeration {
   type ExplorationStatus = Value
-  val Unexplored, Explored, Flagged, Question = Value
+  val Unexplored, Explored, Flagged, Misflagged, Question = Value
 }
 
 case class Vector2(rowOffset:Int, colOffset:Int) {
@@ -769,7 +725,7 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
   private val moves = List(1,0,-1)
   private val adjacent8Directions = (for (x<-moves; y<-moves) yield(x,y)).filter(x=>x!=(0,0))
   
-  def adjacentCoordinates(x:Int, y:Int) = adjacent8Directions.map(loc=>(x+loc._1, y+loc._2)).filter(!outOfBounds(_))
+  def adjacentCoordinates(x:Int, y:Int) = adjacent8Directions.map(loc=>(x+loc._1, y+loc._2)).filter(inBounds(_))
     
   private var numFlagsRemaining:Int = numMines
   
@@ -931,19 +887,20 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
     }
   }
   
-  private def outOfBounds(x:Int, y:Int):Boolean = {
-    x < 0 || x >= numColumns ||
-    y < 0 || y >= numRows
+  def inBounds(x:Int, y:Int): Boolean = {
+    (x >= 0 && x < numColumns) &&
+    (y >= 0 && y < numRows)
   }
   
-  private def outOfBounds(c1:Coord):Boolean = {
-    outOfBounds(c1._1, c1._2)
+  def inBounds(c1:Coord): Boolean = {
+    inBounds(c1._1, c1._2)
   }
+  
   
   private def expandEmptySpace(toExpand:ListBuffer[Coord], previouslyVisited:ListBuffer[Coord], x:Int, y:Int):Unit = {
       
     // Stop the recursion
-    if (outOfBounds(x,y) || 
+    if (!inBounds(x,y) || 
         previouslyVisited.contains(x,y) ||  
         explorationStatus(x,y) == ExplorationStatus.Flagged || 
         explorationStatus(x,y) == ExplorationStatus.Question) { 
@@ -995,21 +952,63 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
     changed()
   }
   
+  /**
+  * Determines whether the given coordinate has been misflagged; user had
+  * a flag in an area that was not a mine
+  */
+  private def misflagged(c:Coord):Boolean = {
+    !isMine(c._1, c._2) && isFlagged(c._1, c._2)
+  }
+  
   private def lose(x:Int,y:Int): Unit = {
     dead = true
-    fillBoard(ExplorationStatus.Explored)
+    
+    // Reveal the unexplored section
+    replace(ExplorationStatus.Unexplored, ExplorationStatus.Explored)
+
+    // If any mines have been misflagged, reveal them as such
+    
+    replace(misflagged _, ExplorationStatus.Misflagged)
+    
+
+    
     mines(y)(x) = Minestatus.Detonated
     timer.stop
   }
   
   private def win(): Unit = {
     won = true
-    fillBoard(ExplorationStatus.Explored)
     timer.stop
     
+    // Replace all non explored squares with flags
+    replace(ExplorationStatus.Unexplored, ExplorationStatus.Flagged)
+    
+    numFlagsRemaining = 0
     // TODO: check for high score, prompt user for name if they have fastest time
     
   }
+  
+  
+  private def replace(replaceCondition: Coord => Boolean, replacement:ExplorationStatus.Value):Unit = {
+    // TODO: functional way of accomplishing this?
+    for (row <- 0 until numRows) {
+      for (col <- 0 until numColumns) {
+        if (replaceCondition((col,row))) {
+          field(row)(col) = replacement
+        }
+      }
+    }
+  
+  }
+  
+  private def replace(target:ExplorationStatus.Value, replacement:ExplorationStatus.Value):Unit = {
+    def sameExplorationStatus(cond:Coord):Boolean = {
+      val (col, row) = cond
+      field(row)(col) == target
+    }
+    replace(sameExplorationStatus _, replacement)
+  }
+  
   
   private def fillBoard(status:ExplorationStatus.Value):Unit = {
     field = Array.fill(numRows, numColumns)(status)
