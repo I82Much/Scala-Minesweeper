@@ -5,15 +5,15 @@ import java.awt.Graphics2D
 import java.awt.Paint
 import java.awt.Rectangle
 import swing.Swing._
-import swing._//{Frame,Panel,Button,BoxPanel,FlowPanel,Dimension,Orientation,MenuBar,Menu}
+import swing._
 import java.awt.Color
 import java.util.{Observable,Observer}
 import swing.event.{WindowClosing,MouseDragged,MousePressed,MouseReleased}
 import javax.swing.JApplet
 
-// TODO: fix the behavior of winning/losing.  Only when you die should
-// you ever see a mine.  Otherwise the flagged/non flagged should stay 
-// TODO: U
+// TODO: add custom handling
+// TODO: add time handling
+
 // TODO: allow custom images for the mines
 // TODO: Create a class encapsulating the row, column stuff
 
@@ -35,9 +35,10 @@ object Minesweeper {
   object Intermediate extends Difficulty(16,16,40) {}
   object Expert extends Difficulty(16,30,99) {}
   
+  
   def main(args:Array[String]) {
 
-    val difficulty = Trivial
+    val difficulty = Beginner
     
     val model = new MinesweeperModel(difficulty.numCols, difficulty.numRows, difficulty.numMines)
     
@@ -93,11 +94,11 @@ class MinesweeperMenu(field:MinesweeperModel, view:MinesweeperView) extends Menu
         contents += new MenuItem( Action("Beginner") { setDifficulty(Minesweeper.Beginner) } )
         contents += new MenuItem( Action("Intermediate") { setDifficulty(Minesweeper.Intermediate) } )
         contents += new MenuItem( Action("Expert") { setDifficulty(Minesweeper.Expert) } )
-        contents += new MenuItem( Action("Custom") { Unit/* Launch dialog for custom*/ } )
+        // contents += new MenuItem( Action("Custom") { Unit/* Launch dialog for custom*/ } )
       },
-      new Menu("High scores") {
-        contents += new MenuItem( Action("View High Scores") { Unit } )
-      },
+      // new Menu("High scores") {
+      //        contents += new MenuItem( Action("View High Scores") { Unit } )
+      //      },
       new Menu("Customize") {
         contents += new MenuItem( Action("Change Background Color") { 
           val color = JColorChooser.showDialog(null, "Pick background color", view.unexploredColor)
@@ -118,7 +119,11 @@ class MinesweeperMenu(field:MinesweeperModel, view:MinesweeperView) extends Menu
     )
 }
 
-class HighScorePanel 
+
+// TODO: show high scores
+class HighScorePanel {
+  
+}
 
 
 /**
@@ -979,10 +984,6 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
   private def win(): Unit = {
     won = true
     timer.stop
-    
-    // Replace all non explored squares with flags
-    replace(ExplorationStatus.Unexplored, ExplorationStatus.Flagged)
-    
     numFlagsRemaining = 0
     // TODO: check for high score, prompt user for name if they have fastest time
     
