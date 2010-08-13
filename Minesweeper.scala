@@ -11,18 +11,19 @@ import java.util.{Observable,Observer}
 import swing.event.{WindowClosing,MouseDragged,MousePressed,MouseReleased}
 import javax.swing.JApplet
 
-// TODO: add custom handling
+// TODO: Figure out the applet BS
 // TODO: add time handling
-
 // TODO: allow custom images for the mines
 // TODO: Create a class encapsulating the row, column stuff
+class MinesweeperApplet extends Applet {
+  val game = new MinesweeperGame()
+  object ui extends UI {
+    contents = game.view
+    def init():Unit = {}
+  }
+}
 
-  
-/**
-* Contains the main menu entry point
-*/
-object Minesweeper {
-  
+object MinesweeperGame {
   // http://en.wikipedia.org/wiki/Minesweeper_%28Windows%29
   // Beginner: 8 × 8 or 9 × 9 field with 10 mines
   // Intermediate: 16 × 16 field with 40 mines
@@ -35,53 +36,57 @@ object Minesweeper {
   object Intermediate extends Difficulty(16,16,40) {}
   object Expert extends Difficulty(16,30,99) {}
   
-  
-  def main(args:Array[String]) {
-
-    val difficulty = Beginner
-    
-    val model = new MinesweeperModel(difficulty.numCols, difficulty.numRows, difficulty.numMines)
-    
-    val scoreboard = new MinesweeperScoreboard(model)
-    val minefieldView = new MinesweeperView(model, scoreboard)
-    
-    val view = new BoxPanel(Orientation.Vertical) {
-      contents ++ List(scoreboard, minefieldView)
-    }
-    
-    
-    val frame = new Frame() with Observer {
-      contents = view
-      title = "Minesweeper"
-      reactions += {
-        case WindowClosing(e) => System.exit(0)
-      }
-      menuBar = new MinesweeperMenu(model, minefieldView)
-      visible=true
-      
-      def update(x:Observable, y:Any):Unit = {
-        pack()
-      }
-    }
-    
-    // Make the Minesweeper model update the views when it changes
-    // Order is important - we want the minefield view to be updated before
-    // the frame for resizing purposes
-    model.addObserver(frame)
-    model.addObserver(scoreboard)
-    model.addObserver(minefieldView)
+  def main(args:Array[String]):Unit = {
+    new MinesweeperGame()
   }
 }
 
+class MinesweeperGame {
+  val difficulty = MinesweeperGame.Beginner
+  
+  val model = new MinesweeperModel(difficulty.numCols, difficulty.numRows, difficulty.numMines)
+  
+  val scoreboard = new MinesweeperScoreboard(model)
+  val minefieldView = new MinesweeperView(model, scoreboard)
+  
+  val view = new BoxPanel(Orientation.Vertical) {
+    contents ++ List(scoreboard, minefieldView)
+  }
+  
+  val frame = new Frame() with Observer {
+    contents = view
+    title = "Minesweeper"
+    reactions += {
+      case WindowClosing(e) => System.exit(0)
+    }
+    menuBar = new MinesweeperMenu(model, minefieldView)
+    visible=true
+    
+    def update(x:Observable, y:Any):Unit = {
+      pack()
+    }
+  }
+  
+  // Make the Minesweeper model update the views when it changes
+  // Order is important - we want the minefield view to be updated before
+  // the frame for resizing purposes
+  model.addObserver(frame)
+  model.addObserver(scoreboard)
+  model.addObserver(minefieldView)
+
+  
+}
+
+  
 
 /**
 * Provides menu options to the player, including choices for changing the
 * difficulty and viewing high scores
 */
 class MinesweeperMenu(field:MinesweeperModel, view:MinesweeperView) extends MenuBar {
-  import Minesweeper.Difficulty._
+  import MinesweeperGame.Difficulty._
   import javax.swing.JColorChooser
-  def setDifficulty(diff:Minesweeper.Difficulty):Unit = {
+  def setDifficulty(diff:MinesweeperGame.Difficulty):Unit = {
     field.numRows = diff.numRows
     field.numColumns = diff.numCols
     field.numMines = diff.numMines
@@ -91,9 +96,9 @@ class MinesweeperMenu(field:MinesweeperModel, view:MinesweeperView) extends Menu
   contents ++
     List(
       new Menu("New Game") {
-        contents += new MenuItem( Action("Beginner") { setDifficulty(Minesweeper.Beginner) } )
-        contents += new MenuItem( Action("Intermediate") { setDifficulty(Minesweeper.Intermediate) } )
-        contents += new MenuItem( Action("Expert") { setDifficulty(Minesweeper.Expert) } )
+        contents += new MenuItem( Action("Beginner") { setDifficulty(MinesweeperGame.Beginner) } )
+        contents += new MenuItem( Action("Intermediate") { setDifficulty(MinesweeperGame.Intermediate) } )
+        contents += new MenuItem( Action("Expert") { setDifficulty(MinesweeperGame.Expert) } )
         // contents += new MenuItem( Action("Custom") { Unit/* Launch dialog for custom*/ } )
       },
       // new Menu("High scores") {
@@ -703,7 +708,6 @@ class Lost extends GameState {}
 class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
   import Minestatus._
   import ExplorationStatus._
-  import Minesweeper.Difficulty
   import javax.swing.{Timer}
   import java.awt.event.{ActionListener,ActionEvent}
   
