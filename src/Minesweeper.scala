@@ -13,7 +13,6 @@ import javax.swing.JApplet
 import javax.swing.JMenuBar
 
 
-// TODO: Figure out the applet BS
 // TODO: add time handling
 // TODO: allow custom images for the mines
 // TODO: Create a class encapsulating the row, column stuff
@@ -21,19 +20,7 @@ class MinesweeperApplet extends Applet {
   val game = new MinesweeperGame()
   object ui extends UI {
     contents = game.view
-
-    
-    
     def init():Unit = {}
-    
-    // val mainPanel = new BoxPanel(Orientation.Vertical) {
-    // // different sort of swing components
-    //  contents.append(new Button("NO"))
-    //  }
-    //  mainPanel.background = Color.WHITE
-    //  contents = mainPanel
-    //    
-    //  def init():Unit = {}
   }
   val menuBar = new MinesweeperJMenuBar(game.model, game.minefieldView)
   setJMenuBar(menuBar)
@@ -54,7 +41,23 @@ object MinesweeperGame {
   object Expert extends Difficulty(16,30,99) {}
   
   def main(args:Array[String]):Unit = {
-    new MinesweeperGame()
+    val game = new MinesweeperGame()
+    val frame = new Frame() with Observer {
+      contents = game.view
+      title = "Minesweeper"
+      reactions += {
+        case WindowClosing(e) => System.exit(0)
+      }
+      menuBar = new MinesweeperMenu(game.model, game.minefieldView)
+      visible=true
+      def update(x:Observable, y:Any):Unit = {
+        pack()
+      }
+      game.model.deleteObservers()
+      game.model.addObserver(this)
+      game.model.addObserver(game.scoreboard)
+      game.model.addObserver(game.minefieldView)
+    }
   }
 }
 
@@ -69,29 +72,13 @@ class MinesweeperGame {
   val view = new BoxPanel(Orientation.Vertical) {
     contents ++ List(scoreboard, minefieldView)
   }
-  
-  // val frame = new Frame() with Observer {
-  //     contents = view
-  //     title = "Minesweeper"
-  //     reactions += {
-  //       case WindowClosing(e) => System.exit(0)
-  //     }
-  //     menuBar = new MinesweeperMenu(model, minefieldView)
-  //     visible=true
-  //     
-  //     def update(x:Observable, y:Any):Unit = {
-  //       pack()
-  //     }
-  //   }
-  
+      
   // Make the Minesweeper model update the views when it changes
   // Order is important - we want the minefield view to be updated before
-  // the frame for resizing purposes
+  // the frame for resizing purposes; the observable uses a stack.
   // model.addObserver(frame)
   model.addObserver(scoreboard)
   model.addObserver(minefieldView)
-
-  
 }
 
   
@@ -1095,7 +1082,6 @@ class MinesweeperModel(width:Int, height:Int, numFlags:Int) extends Observable {
         }
       }
     }
-  
   }
   
   private def replace(target:ExplorationStatus.Value, replacement:ExplorationStatus.Value):Unit = {
