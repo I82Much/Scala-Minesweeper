@@ -230,7 +230,7 @@ object TextPlacer {
         // Mid
         case AnchorPoint.TopCenter => midXOffset
         case AnchorPoint.BottomCenter => midXOffset
-        case AnchorPoint.Center => midXOffset;
+        case AnchorPoint.Center => midXOffset
         // Right
         case AnchorPoint.UpperRight => rightXOffset
         case AnchorPoint.RightCenter => rightXOffset
@@ -371,15 +371,21 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
     // case e => println("=> "+e.toString)
   }
   
+  /**
+  * When mouse is released, depending on which buttons were pressed, either
+  * attempt to expand the 8 adjacent squares around the location of the mouse
+  * release, or just the single center space.
+  */
   def mouseReleased(point:Point, modifiers:Int, clicks:Int, triggersPopup:Boolean):Unit = {
     
     
     if (field.gameOver()) { return Unit }
+    
+    // Make sure the scoreboard reacts appropriately by changing the icon back
+    // to default
     scoreboard.mouseReleased
     
     val colRow = pointToColumnRow(point)
-    
-    
     
     if (field.inBounds(colRow)) {
     
@@ -403,6 +409,10 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
     repaint()
   }
   
+  
+  /**
+  *
+  */
   def handleMousePress(point:Point, modifiers:Int, clicks:Int, triggersPopup:Boolean):Unit = {
     if (field.gameOver()) { return Unit }
     
@@ -468,6 +478,7 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
     sameSquare(p1._1, p1._2, p2._1, p2._2)
   }
   
+  
   override def paint(g: Graphics2D): Unit = {
     super.paint(g)
 
@@ -482,6 +493,10 @@ class MinesweeperView(field:MinesweeperModel, scoreboard:MinesweeperScoreboard) 
     val colGridLines:List[Int] = (0 until numCols + 1).toList.map(map(_, 0, numCols, 0, width-1).asInstanceOf[Int])
     g.clearRect(0,0,width,height)
     
+    /**
+    * @return the rectangle (in screen coordinates) for the square at row
+    * y and column x in 
+    */
     def rect(x:Int, y:Int):Rectangle = {
       val (x1, y1) = (colGridLines(x), rowGridLines(y))
       val (x2, y2) = (colGridLines(x+1), rowGridLines(y+1))
