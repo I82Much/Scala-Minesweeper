@@ -11,10 +11,10 @@ then
     cp $SCALA_HOME/lib/scala-library.jar .
 fi
 
-scalac -sourcepath src -d bin src/Minesweeper.scala
+fsc -sourcepath src -d bin src/Minesweeper.scala
 
 # cd bin
-# jar -cfm ../hellow.jar ../MANIFEST.MF *
-# cd ..
+# jar -cfm ../Mine.jar ../MANIFEST.MF *
+# cd -
 # 
 # java -jar hellow.jar

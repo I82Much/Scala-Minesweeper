@@ -10,6 +10,8 @@ import java.awt.Color
 import java.util.{Observable,Observer}
 import swing.event.{WindowClosing,MouseDragged,MousePressed,MouseReleased}
 import javax.swing.JApplet
+import javax.swing.JMenuBar
+
 
 // TODO: Figure out the applet BS
 // TODO: add time handling
@@ -19,9 +21,24 @@ class MinesweeperApplet extends Applet {
   val game = new MinesweeperGame()
   object ui extends UI {
     contents = game.view
+
+    
+    
     def init():Unit = {}
+    
+    // val mainPanel = new BoxPanel(Orientation.Vertical) {
+    // // different sort of swing components
+    //  contents.append(new Button("NO"))
+    //  }
+    //  mainPanel.background = Color.WHITE
+    //  contents = mainPanel
+    //    
+    //  def init():Unit = {}
   }
+  val menuBar = new MinesweeperJMenuBar(game.model, game.minefieldView)
+  setJMenuBar(menuBar)
 }
+
 
 object MinesweeperGame {
   // http://en.wikipedia.org/wiki/Minesweeper_%28Windows%29
@@ -53,24 +70,24 @@ class MinesweeperGame {
     contents ++ List(scoreboard, minefieldView)
   }
   
-  val frame = new Frame() with Observer {
-    contents = view
-    title = "Minesweeper"
-    reactions += {
-      case WindowClosing(e) => System.exit(0)
-    }
-    menuBar = new MinesweeperMenu(model, minefieldView)
-    visible=true
-    
-    def update(x:Observable, y:Any):Unit = {
-      pack()
-    }
-  }
+  // val frame = new Frame() with Observer {
+  //     contents = view
+  //     title = "Minesweeper"
+  //     reactions += {
+  //       case WindowClosing(e) => System.exit(0)
+  //     }
+  //     menuBar = new MinesweeperMenu(model, minefieldView)
+  //     visible=true
+  //     
+  //     def update(x:Observable, y:Any):Unit = {
+  //       pack()
+  //     }
+  //   }
   
   // Make the Minesweeper model update the views when it changes
   // Order is important - we want the minefield view to be updated before
   // the frame for resizing purposes
-  model.addObserver(frame)
+  // model.addObserver(frame)
   model.addObserver(scoreboard)
   model.addObserver(minefieldView)
 
@@ -92,7 +109,6 @@ class MinesweeperMenu(field:MinesweeperModel, view:MinesweeperView) extends Menu
     field.numMines = diff.numMines
     field.reset()
   }
-  
   contents ++
     List(
       new Menu("New Game") {
@@ -123,6 +139,67 @@ class MinesweeperMenu(field:MinesweeperModel, view:MinesweeperView) extends Menu
       }
     )
 }
+
+
+/**
+* Same as the MinesweeperMenu but a JMenuBar instead of MenuBar due to the
+* requirement that Applet uses a JMenuBar and not a MenuBar.
+*/
+class MinesweeperJMenuBar(field:MinesweeperModel, view:MinesweeperView) extends JMenuBar {
+  import MinesweeperGame.Difficulty._
+  import javax.swing.{Action,AbstractAction}
+  import javax.swing.{JMenu,JCheckBoxMenuItem,JColorChooser}
+  
+  import java.awt.event.ActionEvent
+  
+  def setDifficulty(diff:MinesweeperGame.Difficulty):Unit = {
+    field.numRows = diff.numRows
+    field.numColumns = diff.numCols
+    field.numMines = diff.numMines
+    field.reset()
+  }
+  
+  def difficultyAction(description:String, difficulty:MinesweeperGame.Difficulty):Action = {
+    new AbstractAction(description) {
+      override def actionPerformed(act:ActionEvent):Unit = {
+        setDifficulty(difficulty)
+      }
+    }
+  }
+  
+  val newGameMenu = new JMenu("New Game")
+  newGameMenu.add(difficultyAction("Beginner", MinesweeperGame.Beginner))
+  newGameMenu.add(difficultyAction("Intermediate", MinesweeperGame.Intermediate))
+  newGameMenu.add(difficultyAction("Custom", MinesweeperGame.Expert))
+
+  add(newGameMenu)
+  
+  // Allow user to change background color and switch the mines to flowers
+  val customizeMenu = new JMenu("Customize")
+  val changeBackgroundColor = new AbstractAction("Change Background Color") {
+    override def actionPerformed(evt:ActionEvent):Unit = {
+      val color = JColorChooser.showDialog(null, "Pick background color", view.unexploredColor)
+      if (color != null) {
+        view.unexploredColor = color
+        view.repaint
+      }
+    }
+  }
+  val toggleMines:JCheckBoxMenuItem = new JCheckBoxMenuItem(new AbstractAction("Use flowers instead of mines") {
+    override def actionPerformed(evt:ActionEvent):Unit = {
+      view.useFlower = toggleMines.getState
+      view.repaint
+    }
+    
+  })
+  toggleMines.setState(view.useFlower)
+  
+  customizeMenu.add(changeBackgroundColor)
+  customizeMenu.add(toggleMines)
+  
+  add(customizeMenu)
+}
+
 
 
 // TODO: show high scores
