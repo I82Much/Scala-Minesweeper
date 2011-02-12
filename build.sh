@@ -11,6 +11,12 @@ then
     cp $SCALA_HOME/lib/scala-library.jar .
 fi
 
+if [ ! -d bin ]
+then
+    mkdir bin
+fi
+
+# Compile the Minesweeper class in src, putting the .class files in bin
 fsc -sourcepath src -d bin src/Minesweeper.scala
 
 # cd bin
